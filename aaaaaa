@@ -920,7 +920,6 @@ local C = {
     Black   = Color3.new(0,0,0),
 }
 
--- Live sync with Linoria theme changes
 if _G.LinoriaTheme then
     task.spawn(function()
         while task.wait(0.5) do
@@ -929,6 +928,7 @@ if _G.LinoriaTheme then
             local ok, newAccent = pcall(function() return lib.AccentColor end)
             if not ok or not newAccent then continue end
             if newAccent == C.Accent then continue end
+
             C.Accent = newAccent
             C.AccentDk = Color3.fromRGB(
                 math.clamp(newAccent.R*255-30,0,255),
@@ -938,12 +938,51 @@ if _G.LinoriaTheme then
             pcall(function() C.Main    = lib.MainColor       end)
             pcall(function() C.Outline = lib.OutlineColor    end)
             pcall(function() C.Font    = lib.FontColor       end)
-            C.Hover = Color3.fromRGB(
-                math.clamp(C.Main.R*255+10,0,255),
-                math.clamp(C.Main.G*255+10,0,255),
-                math.clamp(C.Main.B*255+10,0,255))
+            C.Hover    = Color3.fromRGB(math.clamp(C.Main.R*255+10,0,255),math.clamp(C.Main.G*255+10,0,255),math.clamp(C.Main.B*255+10,0,255))
             C.ItemBG   = C.BG
             C.ItemBord = C.Outline
+
+            -- update live UI instances
+            pcall(function()
+                -- accent bars (TopAccent, LPA, RPA etc)
+                for _, obj in pairs(ScreenGui:GetDescendants()) do
+                    if not obj or not obj.Parent then continue end
+                    if obj:IsA("Frame") then
+                        if obj.BackgroundColor3 == TopAccent.BackgroundColor3 then
+                            obj.BackgroundColor3 = C.Accent
+                        end
+                    end
+                end
+                TopAccent.BackgroundColor3  = C.Accent
+                LPA.BackgroundColor3        = C.Accent
+                RPA.BackgroundColor3        = C.Accent
+
+                -- selected type tabs
+                for tn, tb in pairs(typeTabs) do
+                    if tn == selCosType then
+                        tb.inner.BackgroundColor3 = C.Accent
+                    end
+                end
+
+                -- selected weapon cell
+                if selWeapon and wCells[selWeapon] then
+                    wCells[selWeapon].frame.BackgroundColor3 = C.Accent
+                    wCells[selWeapon].frame.BorderColor3     = C.Accent
+                end
+
+                -- selected cosmetic cell
+                if selCosmetic and cCells[selCosmetic] then
+                    cCells[selCosmetic].frame.BackgroundColor3 = C.Accent
+                    cCells[selCosmetic].frame.BorderColor3     = C.Accent
+                end
+
+                -- scroll bars
+                WeaponScroll.ScrollBarImageColor3 = C.Accent
+                CosScroll.ScrollBarImageColor3    = C.Accent
+
+                -- main window border accent
+                TabBar.BorderColor3 = C.Outline
+            end)
         end
     end)
 end
