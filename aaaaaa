@@ -919,6 +919,32 @@ local C = {
     ItemBord= _lt.Outline or Color3.fromRGB(45,45,45),
     Black   = Color3.new(0,0,0),
 }
+
+-- Live sync with Linoria theme changes
+if _G.LinoriaTheme then
+    RunService.Heartbeat:Connect(function()
+        local lib = getgenv().Library
+        if not lib then return end
+        local newAccent = lib.AccentColor
+        if newAccent and newAccent ~= C.Accent then
+            C.Accent = newAccent
+            C.AccentDk = Color3.fromRGB(
+                math.clamp(newAccent.R*255-30,0,255),
+                math.clamp(newAccent.G*255-30,0,255),
+                math.clamp(newAccent.B*255-30,0,255))
+            C.BG      = lib.BackgroundColor or C.BG
+            C.Main    = lib.MainColor       or C.Main
+            C.Outline = lib.OutlineColor    or C.Outline
+            C.Font    = lib.FontColor       or C.Font
+            C.Hover   = Color3.fromRGB(
+                math.clamp(C.Main.R*255+10,0,255),
+                math.clamp(C.Main.G*255+10,0,255),
+                math.clamp(C.Main.B*255+10,0,255))
+            C.ItemBG   = C.BG
+            C.ItemBord = C.Outline
+        end
+    end)
+end
 local FONT=Enum.Font.Code
 
 local function Tween(inst,props,t)
