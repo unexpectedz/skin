@@ -899,18 +899,25 @@ ScreenGui.ZIndexBehavior=Enum.ZIndexBehavior.Global; ScreenGui.IgnoreGuiInset=tr
 pcall(function() ScreenGui.Parent=FakeCore end)
 if not ScreenGui.Parent then ScreenGui.Parent=LocalPlayer:WaitForChild("PlayerGui") end
 
-local C={
-    BG      =Color3.fromRGB(20,20,20),
-    Main    =Color3.fromRGB(28,28,28),
-    Accent  = (typeof(Library) ~= "nil" and Library.Theme and Library.Theme.SchemeColor) or Color3.fromRGB(0,85,255),
-    AccentDk= (typeof(Library) ~= "nil" and Library.Theme and Library.Theme.SchemeColor) or Color3.fromRGB(0,55,180),
-    Outline =Color3.fromRGB(50,50,50),
-    Font    =Color3.fromRGB(255,255,255),
-    SubFont =Color3.fromRGB(160,160,160),
-    Hover   =Color3.fromRGB(38,38,46),
-    ItemBG  =Color3.fromRGB(24,24,24),
-    ItemBord=Color3.fromRGB(45,45,45),
-    Black   =Color3.new(0,0,0),
+local _lt = _G.LinoriaTheme or {}
+local C = {
+    BG      = _lt.Dark    or Color3.fromRGB(20,20,20),
+    Main    = _lt.Main    or Color3.fromRGB(28,28,28),
+    Accent  = _lt.Accent  or Color3.fromRGB(0,85,255),
+    AccentDk= _lt.Accent  and Color3.fromRGB(
+                  math.clamp(_lt.Accent.R*255-30,0,255),
+                  math.clamp(_lt.Accent.G*255-30,0,255),
+                  math.clamp(_lt.Accent.B*255-30,0,255)) or Color3.fromRGB(0,55,180),
+    Outline = _lt.Outline or Color3.fromRGB(50,50,50),
+    Font    = _lt.Font    or Color3.fromRGB(255,255,255),
+    SubFont = Color3.fromRGB(160,160,160),
+    Hover   = _lt.Main    and Color3.fromRGB(
+                  math.clamp(_lt.Main.R*255+10,0,255),
+                  math.clamp(_lt.Main.G*255+10,0,255),
+                  math.clamp(_lt.Main.B*255+10,0,255)) or Color3.fromRGB(38,38,46),
+    ItemBG  = _lt.Dark    or Color3.fromRGB(24,24,24),
+    ItemBord= _lt.Outline or Color3.fromRGB(45,45,45),
+    Black   = Color3.new(0,0,0),
 }
 local FONT=Enum.Font.Code
 
