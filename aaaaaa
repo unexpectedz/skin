@@ -1,0 +1,2597 @@
+-- // UI Bypass
+assert(newcclosure, "newcclosure missing")
+
+local LogService    = game:GetService("LogService")
+local ScriptContext = game:GetService("ScriptContext")
+
+task.spawn(function()
+    for _, Connection in pairs(getconnections(LogService.MessageOut)) do
+        if Connection and Connection.Function then
+            hookfunction(Connection.Function, newcclosure(function(...) return nil end))
+        end
+    end
+end)
+
+task.spawn(function()
+    for _, Connection in pairs(getconnections(ScriptContext.Error)) do
+        if Connection then pcall(function() Connection:Disable() end) end
+    end
+    hookfunction(ScriptContext.Error.Connect, newcclosure(function(...) return nil end))
+end)
+
+local LogService = game:GetService("LogService")
+local ScriptContext = game:GetService("ScriptContext")
+
+task.spawn(function()
+    local Hooked = 0
+
+    for _, Connection in pairs(getconnections(LogService.MessageOut)) do
+        if Connection and Connection.Function then
+            hookfunction(Connection.Function, newcclosure(function(...)
+                return nil
+            end))
+            Hooked += 1
+        end
+    end
+
+    print("Hooked " .. Hooked .. " MessageOut Connections")
+end)
+
+task.spawn(function()
+    local Hooked = 0
+
+    for _, Connection in pairs(getconnections(ScriptContext.Error)) do
+        if Connection then
+            Connection:Disable()
+            Hooked += 1
+        end
+    end
+
+    print("Hooked " .. Hooked .. " Error Connections")
+
+    hookfunction(ScriptContext.Error.Connect, newcclosure(function(...)
+        return nil
+    end))
+end)
+
+assert(newcclosure, "newcclosure missing")
+
+local CoreGui = game:GetService("CoreGui")
+
+local Redirect = CoreGui
+    :WaitForChild("RobloxGui")
+    :FindFirstChild("Modules")
+    :WaitForChild("Common")
+
+local OriginalGetHui = gethui
+
+gethui = newcclosure(function(...)
+    print("[gethui] Called")
+
+    if OriginalGetHui then
+        local Result = OriginalGetHui(...)
+        print("[gethui] Original Returned:", Result)
+
+        if Result == CoreGui then
+            print("[gethui] Blocked CoreGui, Redirecting")
+            return Redirect
+        end
+
+        return Result
+    end
+
+    print("[gethui] No Original, Returning Redirect")
+    return Redirect
+end)
+
+local FakeCore = gethui() or Redirect
+print("[gethui] FakeCore:", FakeCore)
+
+-- Anti-kick
+task.spawn(function()
+    local targets = {"Kick", "kick"}
+    for _, name in ipairs(targets) do
+        local ok, func = pcall(function() return game:GetService("Players").LocalPlayer[name] end)
+        if ok and type(func) == "function" then
+            local old; old = hookfunction(func, newcclosure(function(self, ...)
+                if self == game:GetService("Players").LocalPlayer then return end
+                return old(self, ...)
+            end))
+        end
+    end
+end)
+
+-- Setmetatable hook (anti-detection)
+local oldtable; oldtable = hookfunction(getrenv().setmetatable, newcclosure(function(Table, Metatable)
+    if Metatable and typeof(Metatable) == "table" and rawget(Metatable, "__mode") == "kv" then
+        local trace = debug.traceback()
+        if trace:find("MiscellaneousController") then
+            return oldtable({1, 2, 3}, {})
+        end
+    end
+    return oldtable(Table, Metatable)
+end))
+
+local CoreGui  = game:GetService("CoreGui")
+local Redirect = CoreGui:WaitForChild("RobloxGui"):FindFirstChild("Modules"):WaitForChild("Common")
+
+local OriginalGetHui = gethui
+gethui = newcclosure(function(...)
+    if OriginalGetHui then
+        local Result = OriginalGetHui(...)
+        if Result == CoreGui then return Redirect end
+        return Result
+    end
+    return Redirect
+end)
+local FakeCore = gethui() or Redirect
+
+-- // Services
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local HttpService       = game:GetService("HttpService")
+local UserInputService  = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+local TextService       = game:GetService("TextService")
+local LocalPlayer       = Players.LocalPlayer
+local Mouse             = LocalPlayer:GetMouse()
+
+local IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+-- // Data
+local WeaponSkins = {
+    ["Assault Rifle"]    = {"Phoenix Rifle","10B Visits","AK-47","Boneclaw Rifle","AUG","Tommy Gun","Glorious Assault Rifle","AKEY-47","Gingerbread AUG"},
+    ["Handgun"]          = {"Gumball Handgun","Pumpkin Handgun","Towerstone Handgun","Warp Handgun","Blaster","Hand Gun","Gingerbread Handgun","Pixel Handgun","Glorious Handgun","Stealth Handgun"},
+    ["Sniper"]           = {"Eyething Sniper","Pixel Sniper","Hyper Sniper","Event Horizon","Glorious Sniper","Keyper","Gingerbread Sniper"},
+    ["Shotgun"]          = {"Cactus Shotgun","Wrapped Shotgun","Broomstick","Balloon Shotgun","Hyper Shotgun","Glorious Shotgun","Shotkey"},
+    ["Burst Rifle"]      = {"Pine Burst","Spectral Burst","FAMAS","Aqua Burst","Glorious Burst Rifle","Pixel Burst","Electro Rifle","Keyst Rifle"},
+    ["Daggers"]          = {"Paper Planes","Shurikens","Aces","Keynais","Glorious Daggers","Cookies","Bat Daggers","Crystal Daggers"},
+    ["Knife"]            = {"Chancla","Machete","Balisong","Karambit","Keyrambit","Keylisong","Glorious Knife","Candy Cane"},
+    ["Revolver"]         = {"Boneclaw Revolver","Desert Eagle","Sheriff","Peppergun","Peppermint Sheriff","Keyvolver","Glorious Revolver"},
+    ["Uzi"]              = {"Pine Uzi","Water Uzi","Electro Uzi","Money Gun","Demon Uzi","Keyzi","Glorious Uzi"},
+    ["Riot Shield"]      = {"Door","Sled","Tombstone Shield","Energy Shield","Masterpiece","Glorious Riot Shield"},
+    ["Battle Axe"]       = {"Ban Axe","Nordic Axe","Cerulean Axe","The Shred","Glorious Battle Axe","Mimic Axe"},
+    ["Fists"]            = {"Brass Knuckles","Festive Fists","Pumpkin Claws","Boxing Gloves","Glorious Fists"},
+    ["Katana"]           = {"Saber","Stellar Katana","Lightning Bolt","Linked Sword","Glorious Katana","Pixel Katana","Keytana","Arch Katana","Crystal Katana","New Year Katana"},
+    ["RPG"]              = {"Pencil Launcher","Nuke Launcher","Spaceship Launcher","Squid Launcher","Glorious RPG","RPKEY","Firework Launcher","Pumpkin Launcher"},
+    ["Minigun"]          = {"Pumpkin Minigun","Wrapped Minigun","Lasergun 3000","Fighter Jet","Pixel Minigun","Glorious Minigun"},
+    ["Flamethrower"]     = {"Lamethrower","Pixel Flamethrower","Glitterthrower","Glorious Flamethrower","Snowblower","Keythrower"},
+    ["Bow"]              = {"Compound Bow","Bat Bow","Dream Bow","Raven Bow","Glorious Bow","Frostbite Bow","Key Bow"},
+    ["Crossbow"]         = {"Crossbone","Pixel Crossbow","Violin Crossbow","Harpoon Crossbow","Glorious Crossbow","Frostbite Crossbow","Arch Crossbow"},
+    ["Distortion"]       = {"Cyber Distortion","Electropunk Distortion","Magma Distortion","Plasma Distortion","Sleighstortion","Glorious Distortion","Experiment D15"},
+    ["Gunblade"]         = {"Boneblade","Crude Gunblade","Elf's Gunblade","Hyper Gunblade","Gunsaw","Glorious Gunblade"},
+    ["Paintball Gun"]    = {"Ketchup Gun","Slime Gun","Boba Gun","Glorious Paintball Gun","Brain Gun","Snowball Gun"},
+    ["Grenade Launcher"] = {"Swashbuckler","Gearnade Launcher","Uranium Launcher","Glorious Grenade Launcher","Skull Launcher","Snowball Launcher"},
+    ["Energy Rifle"]     = {"New Year Energy Rifle","Apex Rifle","Hacker Rifle","Void Rifle","Hydro Rifle","Glorious Energy Rifle","Soul Rifle"},
+    ["Exogun"]           = {"Midnight Festive Exogun","Singularity","Repulsor","Exogourd","Wondergun","Ray Gun","Glorious Exogun"},
+    ["Flare Gun"]        = {"Wrapped Flare Gun","Firework Gun","Banana Flare","Dynamite Gun","Vexed Flare Gun","Glorious Flare Gun"},
+    ["Shorty"]           = {"Lovely Shorty","Not So Shorty","Too Shorty","Wrapped Shorty","Balloon Shorty","Glorious Shorty","Demon Shorty"},
+    ["Slingshot"]        = {"Goalpost","Stick","Harp","Boneshot","Reindeer Slingshot","Glorious Slingshot"},
+    ["Spray"]            = {"Lovely Spray","Nail Gun","Pine Spray","Boneclaw Spray","Spray Bottle","Glorious Spray"},
+    ["Warper"]           = {"Glitter Warper","Hotel Bell","Arcane Warper","Electropunk Warper","Glorious Warper"},
+    ["Chainsaw"]         = {"Blobsaw","Mega Drill","Handsaws","Glorious Chainsaw","Festive Buzzsaw","Buzzsaw"},
+    ["Scythe"]           = {"Scythe of Death","Sakura Scythe","Anchor","Glorious Scythe","Keythe","Bat Scythe","Cryo Scythe"},
+    ["Trowel"]           = {"Plastic Shovel","Paintbrush","Garden Shovel","Glorious Trowel","Snow Shovel","Pumpkin Carver"},
+    ["Flashbang"]        = {"Lightbulb","Skullbang","Disco Ball","Camera","Glorious Flashbang","Pixel Flashbang","Shining Star"},
+    ["Freeze Ray"]       = {"Wrapped Freeze Ray","Temporal Ray","Gum Ray","Bubble Ray","Glorious Freeze Ray","Spider Ray"},
+    ["Grenade"]          = {"Dynamite","Frozen Grenade","Whoopee Cushion","Water Balloon","Glorious Grenade","Soul Grenade","Jingle Grenade","Keynade"},
+    ["Jump Pad"]         = {"Spider Web","Trampoline","Shady Chicken Sandwich","Bounce House","Glorious Jump Pad"},
+    ["Molotov"]          = {"Coffee","Torch","Lava Lamp","Glorious Molotov","Vexed Candle","Hot Coals"},
+    ["Satchel"]          = {"Notebook Satchel","Suspicious Gift","Advanced Satchel","Glorious Satchel","Potion Satchel"},
+    ["Smoke Grenade"]    = {"Balance","Emoji Cloud","Hourglass","Glorious Smoke Grenade","Eyeball","Snowglobe"},
+    ["Subspace Tripmine"]= {"DIY Tripmine","Trick or Treat","Don't Press","Spring","Glorious Subspace Tripmine","Dev-in-the-Box"},
+    ["War Horn"]         = {"Mammoth Horn","Megaphone","Trumpet","Air Horn","Glorious War Horn","Boneclaw Horn"},
+    ["Warpstone"]        = {"Cyber Warpstone","Electropunk Warpstone","Teleport Disc","Glorious Warpstone"},
+    ["Energy Pistols"]   = {"Hydro Pistols","Void Pistols","Hacker Pistols","Glorious Energy Pistols","Hyperlaser Guns","Apex Pistols","Soul Pistols","New Year Energy Pistols"},
+    ["Permafrost"]       = {"Ice Permafrost","Glorious Permafrost"},
+    ["Medkit"]           = {"Sandwich","Medkitty","Laptop","Glorious Medkit","Briefcase","Bucket of Candy","Milk & Cookies"},
+}
+
+local allWraps = {"Beige","Bluesteel","Blue","Blush","Brown","Cheese","Cool","Copper","Crimson","Cursed","Frigid","Glorious","Green","Gunmetal","Haunted","Highlighter","Hot Cocoa","Jean","Lapis","Lavish Crystal","Lemon","Lumber","Machine","MaGGenta","Maroon","Midnight","Mint","Mustard","Navy","Noir","Normal","Olive","Olo","Orange","Ornate","Pink","Pink Lemonade","Playful","Purple","Red","Rust","Salmon","Sky","Sleet","Slush","Spiral","Stained","Tawny","Teal","Titanium","Tungsten","Tusky","Venom","Vexed","Violet","Yellow","Zombie","Ancient","Arctic Camo","Black","Black Granite","Blush Wrapping","Brain","Bunsen","Carbon Wrapping","Carmine","Carpet","Cashmere Wrapping","Celtic","Cerulean","Chrome Webs","Chilled Wrapping","Circuit","Clamshell","Clouds","Cold Metal","Cool Crochet","Cork","Creme Wrapping","Crimson Art","Crossed","Desert Camo","Digital Camo","Dunes","Dusky Wrapping","Eco","Evergreen Wrapping","Experience","Fiery","Fire","Forest Camo","Forest Wrapping","Fortune Wrapping","Frosted","Frosty Wrapping","Glisten","Glossy","Gold","Grass","Green Goo","Hammered Copper","Holly Wrapping","Honeycomb","Hypnotic","Ice","Indigo Wrapping","Iron","Jolly","Jungle Camo","Lavender Wrapping","Leather","Leopard","Marble","Maroon Wrapping","Metallic","Mossy","Night Camo","Obsidion","Oceanic","Ornate Wrapping","Pale","Pastel","Patched","Permafrost","Petal","Pine","Pinstripe","Plaid","Polished","Polka Dot","Prism","Prismatic","Red Granite","Rose Wrapping","Royal Wrapping","Seafoam Wrapping","Shark","Silver","Snake","Snow Camo","Snowday","Spooky","Starry","Static","Steel","Sticky","Sunset","Tangerine Wrapping","Tiger","Urban Camo","Velvet Wrapping","Verdant Wrapping","Vintage","Wave","Werewolf Fur","White","Winter Solstice","Yang","Yin",".dll",".exe","2025 Wrapping","Amber","Arabesque","Arena","Aurora","Aurum","Beach","Bee","Black Damascus","Black Opal","Black Glass","Blaze","Bombastic","Bright","Bubbles","Candlelight","Candy Apple","Carbon Fiber","Cardinal","Chrome","Classic","Crystallized","Damascus","Dark","Devourer","Diamond","Disco","Dragon","Dragon Scale","Electric","Emerald","Energy","Ethereal","Festive","Galaxy","Gilded","Glitch","Glass","Heat","Hex","Holographic","Hyper","Inferno","Iridescent","Jade","Lava","Lightning","Magma","Matrix","Molten","Nebula","Neon","Obsidian Damascus","Onyx","Paid","Pearl","Phoenix","Plasma","Platinum","Portal","Purple Goo","Rage","Rainbow","Redline","Regal","Regal Wrapping","Reptile","Retro","Ruby","Sapphire","Shattered","Solar","Spectrum","Star","Supernova","Tech","Thunder","Toxic","Toy","Trophy","Universal","Valentine","Vaporwave","Void","Volcano","Water","Wood","Xenon","Dark Matter","Key","Radiant","Secret","Beggar","Developer","Tester"}
+table.sort(allWraps)
+
+local allCharms = {"Armchair","Bone","Bowling Pin","Cage","Candy","Candy Corn","Chombie Head","Cobweb","Cog","Cookie","Crystal","Cupcake","Dice","Fedora Stack","Glory Coin","Hammer","Heart","Hook","Ice Cube","Jolly Hat","Lemon Slice","Life Buoy","Magnet","Mini Candy Cane","Mini Shining Star","Ninja Star","Ornament","Pawn","Peppermint Candy","Potted Cactus","Potted Flower","Rune Ring","Runes","Ship Wheel","Snowflake","Snowflake Ring","Snowman","Spider","Star","Table Lamp","Thorn Circle","Traffic Cone","Witch Hat","10 Gallon Hat","Anvil","Basketball","Bitster","Blobfish","Candy Bucket","Caramel Apple","Devious Pumpkin","Emoji: Weary","Festive Light","Football","Golf Ball","Gravestone","Hot Chocolate","Hotdog","Melonkin","Mini Portal","Moai","Money Bag","Mystery Block","Poop","Potion","Pufferfish","Rainbow","Rocket Ship","Rubber Duck","Stocking","Tennis Ball","UFO","Alien Head","Black Cat","Cauldron","Chillman","Dumbkin","Emoji: Imp","Emoji: Nerd","Emoji: Nauseated","Energy Cell","Explosion","Eyeclipse","EZ","First Aid","Frankenblob","Ghost","Gingerbread Cat","Jingle Bell","Keycard 3","Mini Ban Hammer","Mini Disco Ball","Mini Key","Mini Snowglobe","Pumpkin Cat","Skull","Skullgourd","Warp Disc","Wreath","100M Visits","1st Birthday Cake","3D Glasses","8sty","Applino","Atorix","Bandites","Bell","Blizmid","BobbVX","Brian1KB","Bungeoppang","CarbonMeister","Chex","D_reamz","Darktru","Day 1","DV","enriquebruv","Fireplace","Frozen Gaming Chair","Gaming Headset","GreatGuyBoom","Hoopie","Hoppy819","Hunt Token","I Survived Season 0","KaiM","Karful","Kaye","Khayri","Mega Token","Mini Present","MiniBloxia","Mud","nekoanims","Nosniy","Nosniy Games","oPixel","philhood","RIA25 Award","RIVALS","Season 0","Season 1","SenseiWarrior","ShadowTrojan","SharkTactics","Shooting Star","Streamer Microphone","TanqR","viecti","Alpha Coin","Coinbama","Team Crown"}
+table.sort(allCharms)
+
+-- // SkinChanger
+local SkinChanger = {
+    skinFolders={},allSkins={},viewModelsPath=nil,backupFolder=nil,
+    equipped={},constructingWeapon=nil,CosmeticLibrary=nil,ItemLibrary=nil,
+    DataController=nil,RepClass=nil,EnumLibrary=nil,
+}
+
+local modulesLoaded = false
+local RefreshAllWeaponImages
+
+SkinChanger.InitializeModules = function(self)
+    pcall(function()
+        local controllers = LocalPlayer.PlayerScripts:WaitForChild("Controllers",10)
+        local modules     = ReplicatedStorage:WaitForChild("Modules",10)
+        if modules then
+            self.EnumLibrary     = require(modules:WaitForChild("EnumLibrary",10))
+            self.CosmeticLibrary = require(modules:WaitForChild("CosmeticLibrary",10))
+            self.ItemLibrary     = require(modules:WaitForChild("ItemLibrary",10))
+            self.RepClass        = require(modules:WaitForChild("ReplicatedClass",10))
+        end
+        if controllers then
+            self.DataController = require(controllers:WaitForChild("PlayerDataController",10))
+        end
+        if self.EnumLibrary and self.EnumLibrary.WaitForEnumBuilder then
+            self.EnumLibrary:WaitForEnumBuilder()
+        end
+        modulesLoaded = true
+        if RefreshAllWeaponImages then RefreshAllWeaponImages() end
+    end)
+end
+
+SkinChanger.CloneCosmetic = function(self, name, ctype, opts)
+    local data = {}
+    if self.CosmeticLibrary and self.CosmeticLibrary.Cosmetics and self.CosmeticLibrary.Cosmetics[name] then
+        for k,v in pairs(self.CosmeticLibrary.Cosmetics[name]) do data[k]=v end
+    end
+    data.Name = name; data.Type = data.Type or ctype; data.Seed = data.Seed or math.random(1,999999)
+    if self.EnumLibrary then
+        local ok,enumId = pcall(self.EnumLibrary.ToEnum,self.EnumLibrary,name)
+        if ok and enumId then data.Enum=enumId; data.ObjectID=data.ObjectID or enumId end
+    end
+    if opts and opts.inverted ~= nil then data.Inverted = opts.inverted end
+    return data
+end
+
+SkinChanger.InitializeViewModelsPath = function(self)
+    local ok,path = pcall(function() return LocalPlayer.PlayerScripts.Assets.ViewModels.Weapons end)
+    if ok and path then self.viewModelsPath=path; return true end
+    local s2,vm = pcall(function() return LocalPlayer.PlayerScripts.Assets.ViewModels end)
+    if not(s2 and vm) then return false end
+    local f=Instance.new("Folder"); f.Name="Weapons"; f.Parent=vm
+    self.viewModelsPath=f; return true
+end
+
+SkinChanger.DiscoverAllSkinFolders = function(self)
+    if not(self.viewModelsPath or self:InitializeViewModelsPath()) then return false end
+    local root=self.viewModelsPath.Parent; local count=0
+    local function search(folder,depth)
+        if depth>6 then return end
+        pcall(function()
+            for _,child in ipairs(folder:GetChildren()) do
+                if child:IsA("Folder") then
+                    local hasModels=false
+                    for _,item in ipairs(child:GetChildren()) do
+                        if item:IsA("Model") then hasModels=true; break end
+                    end
+                    if hasModels then self.skinFolders[child.Name]=child; count+=1 end
+                    task.wait(); search(child,depth+1)
+                end
+            end
+        end)
+    end
+    search(root,0); return count>0
+end
+
+SkinChanger.BuildSkinDatabase = function(self)
+    self.allSkins={}; local total=0
+    for _,folder in pairs(self.skinFolders) do
+        pcall(function()
+            for _,model in ipairs(folder:GetChildren()) do
+                if model:IsA("Model") and not self.allSkins[model.Name] then
+                    self.allSkins[model.Name]={name=model.Name,model=model}; total+=1
+                end
+            end
+        end)
+    end
+    return total
+end
+
+SkinChanger.FindSkinModel = function(self,skinName)
+    if not skinName then return nil end
+    if self.allSkins[skinName] then return self.allSkins[skinName].model end
+    for _,folder in pairs(self.skinFolders) do
+        local ok,model=pcall(function() return folder:IsA("Folder") and folder:FindFirstChild(skinName) or nil end)
+        if ok and model then return model end
+    end
+    return nil
+end
+
+SkinChanger.GetOrCreateBackupFolder = function(self)
+    if self.backupFolder and self.backupFolder.Parent then return self.backupFolder end
+    if not(self.viewModelsPath or self:InitializeViewModelsPath()) then return nil end
+    local ok,folder=pcall(function()
+        local b=self.viewModelsPath:FindFirstChild("OriginalBackups")
+        if not b then b=Instance.new("Folder"); b.Name="OriginalBackups"; b.Parent=self.viewModelsPath end
+        return b
+    end)
+    if not ok then return nil end
+    self.backupFolder=folder; return folder
+end
+
+SkinChanger.ApplySkinModel = function(self,weaponName,skinName)
+    if not(self.viewModelsPath or self:InitializeViewModelsPath()) then return false end
+    local weaponModel=self.viewModelsPath:FindFirstChild(weaponName)
+    if not(weaponModel and weaponModel:IsA("Model")) then return false end
+    local skinModel=self:FindSkinModel(skinName)
+    if not skinModel then return false end
+    local bf=self:GetOrCreateBackupFolder(); if not bf then return false end
+    local bn=weaponName.."_Original"
+    if not bf:FindFirstChild(bn) then
+        local backup=weaponModel:Clone(); backup.Name=bn; backup.Parent=bf
+    end
+    weaponModel:Destroy()
+    local nm=skinModel:Clone(); nm.Name=weaponName; nm.Parent=self.viewModelsPath
+    local sd=self:CloneCosmetic(skinName,"Skin",{})
+    if sd then
+        self.equipped[weaponName]=self.equipped[weaponName] or {}
+        self.equipped[weaponName].Skin=sd; self.equipped[weaponName].Name=weaponName
+    end
+    return true
+end
+
+SkinChanger.SetupHooks = function(self)
+    if not(self.CosmeticLibrary and self.DataController) then return end
+    self.CosmeticLibrary.OwnsCosmeticNormally    = function() return true end
+    self.CosmeticLibrary.OwnsCosmeticUniversally = function() return true end
+    self.CosmeticLibrary.OwnsCosmeticForWeapon   = function() return true end
+    local oldOwns=self.CosmeticLibrary.OwnsCosmetic
+    local _missingPfx=string.char(77,73,83,83,73,78,71,95)
+    self.CosmeticLibrary.OwnsCosmetic=function(s,inv,name,weapon)
+        if name:find(_missingPfx) then return oldOwns(s,inv,name,weapon) end
+        return true
+    end
+    local oldGet=self.DataController.Get
+    self.DataController.Get=function(s,key)
+        local data=oldGet(s,key)
+        if key=="Cosmetics" then
+            local copy={}
+            if data then for k,v in pairs(data) do copy[k]=v end end
+            if self.CosmeticLibrary.Cosmetics then
+                for name in pairs(self.CosmeticLibrary.Cosmetics) do
+                    if not copy[name] then copy[name]=true end
+                end
+            end
+            return copy
+        end
+        return data
+    end
+    local oldGetW=self.DataController.GetWeaponData
+    self.DataController.GetWeaponData=function(s,wn)
+        local data=oldGetW(s,wn); if not data then return nil end
+        local merged=table.clone(data); merged.Name=wn
+        if self.equipped[wn] then
+            for ctype,cosData in pairs(self.equipped[wn]) do merged[ctype]=cosData end
+        end
+        return merged
+    end
+    pcall(function()
+        local CI=require(LocalPlayer.PlayerScripts.Modules.ClientReplicatedClasses.ClientFighter.ClientItem)
+        local oldVM=CI._CreateViewModel
+        CI._CreateViewModel=function(item,vm)
+            local owner=item.ClientFighter and item.ClientFighter.Player
+            local wname=item.Name
+            if owner==LocalPlayer and self.equipped[wname] then
+                self.constructingWeapon=wname
+                local d=item:ToEnum("Data")
+                if self.equipped[wname].Skin then
+                    vm[d][item:ToEnum("Skin")]=self.equipped[wname].Skin
+                    vm[d][item:ToEnum("Name")]=self.equipped[wname].Skin.Name
+                end
+                if self.equipped[wname].Wrap  then vm[d][item:ToEnum("Wrap")]=self.equipped[wname].Wrap   end
+                if self.equipped[wname].Charm then vm[d][item:ToEnum("Charm")]=self.equipped[wname].Charm end
+            end
+            local r=oldVM(item,vm); self.constructingWeapon=nil; return r
+        end
+    end)
+    pcall(function()
+        local vmMod=LocalPlayer.PlayerScripts.Modules.ClientReplicatedClasses.ClientFighter.ClientItem:FindFirstChild("ClientViewModel")
+        if not vmMod then return end
+        local CVM=require(vmMod); local oldNew=CVM.new
+        CVM.new=function(repdata,clientItem)
+            local owner=clientItem.ClientFighter and clientItem.ClientFighter.Player
+            local wname=self.constructingWeapon or clientItem.Name
+            if owner==LocalPlayer and self.equipped[wname] then
+                local dk=self.RepClass:ToEnum("Data"); repdata[dk]=repdata[dk] or {}
+                local cos=self.equipped[wname]
+                if cos.Skin  then repdata[dk][self.RepClass:ToEnum("Skin")]=cos.Skin   end
+                if cos.Wrap  then repdata[dk][self.RepClass:ToEnum("Wrap")]=cos.Wrap   end
+                if cos.Charm then repdata[dk][self.RepClass:ToEnum("Charm")]=cos.Charm end
+            end
+            return oldNew(repdata,clientItem)
+        end
+    end)
+    pcall(function()
+        local oldImg=self.ItemLibrary.GetViewModelImageFromWeaponData
+        self.ItemLibrary.GetViewModelImageFromWeaponData=function(s,wd,hi)
+            if wd and wd.Skin and self.equipped[wd.Name] then
+                local vm=s.ViewModels and s.ViewModels[wd.Skin.Name]
+                if vm then return vm[hi and "ImageHighResolution" or "Image"] or vm.Image end
+            end
+            return oldImg(s,wd,hi)
+        end
+    end)
+end
+
+-- // Improved ApplyLive — uses FighterController directly for instant wrap/charm refresh
+local function GetLiveItemsFromFC()
+    local items = {}
+    pcall(function()
+        local FC = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+        -- Try LocalFighter first (fastest path)
+        if FC.LocalFighter then
+            for _, item in pairs(FC.LocalFighter.Items or {}) do
+                if item and item.Name and item.ViewModel then
+                    items[item.Name] = item
+                end
+            end
+        end
+        -- Also sweep GameComponentsController if needed
+        if not next(items) then
+            local ok, GCC = pcall(require, LocalPlayer.PlayerScripts.Controllers.GameComponentsController)
+            if ok and GCC then
+                for _, comp in pairs(GCC.Components or {}) do
+                    if comp.LocalFighter then
+                        for _, item in pairs(comp.LocalFighter.Items or {}) do
+                            if item and item.Name and item.ViewModel then items[item.Name] = item end
+                        end
+                    end
+                    if comp.Fighters then
+                        for _, fighter in pairs(comp.Fighters) do
+                            if fighter.Player == LocalPlayer then
+                                for _, item in pairs(fighter.Items or {}) do
+                                    if item and item.Name and item.ViewModel then items[item.Name] = item end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    return items
+end
+
+-- Force-reequip the item by switching away and back (swaps to first other slot then returns)
+-- Only called for Skin changes since those need a full rebuild
+local function ForceReequipItem(weaponName)
+    pcall(function()
+        local FC = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+        local lf = FC.LocalFighter
+        if not lf then return end
+
+        local targetIdx, currentIdx
+        for i, item in pairs(lf.Items) do
+            if item.Name == weaponName and item.IsEquipped then
+                currentIdx = i
+            end
+        end
+        if not currentIdx then return end
+
+        -- Find any other slot to switch to briefly
+        for i, item in pairs(lf.Items) do
+            if i ~= currentIdx and item.Info then
+                targetIdx = i
+                break
+            end
+        end
+
+        if targetIdx then
+            lf:EquipItem(targetIdx)
+            task.wait(0.05)
+            lf:EquipItem(currentIdx)
+        end
+    end)
+end
+
+local function ApplyLive(weaponName)
+    if not modulesLoaded then return end
+    local eq = SkinChanger.equipped[weaponName]
+    if not eq then return end
+
+    local liveItems = GetLiveItemsFromFC()
+    local item = liveItems[weaponName]
+
+    -- For Wrap and Charm: apply directly to ViewModel right now
+    if item and item.ViewModel then
+        local vm = item.ViewModel
+        if eq.Wrap then
+            pcall(function() vm:Set("Wrap", eq.Wrap) end)
+            pcall(function() vm:_UpdateWrap() end)
+            -- Some versions use _Setup or _BuildWrap instead
+            pcall(function() vm:_BuildWrap() end)
+        end
+        if eq.Charm then
+            pcall(function() vm:Set("Charm", eq.Charm) end)
+            pcall(function()
+                if vm.Charm then vm.Charm:Destroy() end
+                vm.Charm = nil
+                vm:_Setup()
+            end)
+            -- Alternative charm rebuild path
+            pcall(function() vm:_BuildCharm() end)
+        end
+    end
+
+    -- For Skin: needs full ViewModel rebuild — use ForceReequip trick
+    if eq.Skin then
+        pcall(function()
+            if item and item.ViewModel then
+                local wasEquipped = item.IsEquipped
+                local serial = item._serial
+                if serial then
+                    item.ViewModel:Destroy()
+                    item.ViewModel = item:_CreateViewModel(serial.ViewModel)
+                    pcall(function() item.ViewModel:SetParent(workspace.ViewModels.FirstPerson) end)
+                    if wasEquipped then item.ViewModel:Equip(true) end
+                    return -- success, no need to force reequip
+                end
+            end
+            -- Fallback: force slot swap to trigger natural ViewModel rebuild
+            ForceReequipItem(weaponName)
+        end)
+    end
+end
+
+task.spawn(function()
+    SkinChanger:InitializeModules()
+    if SkinChanger:DiscoverAllSkinFolders() then
+        SkinChanger:BuildSkinDatabase()
+        task.spawn(function() pcall(function() SkinChanger:SetupHooks() end) end)
+    end
+end)
+
+-- // Save / Load
+local SKINS_SAVE_PATH = "jujurivals/rivals/skins.json"
+local function saveSkinsFile()
+    local data={}
+    for weapon,eq in pairs(SkinChanger.equipped) do
+        local entry={}
+        if eq.Skin  and eq.Skin.Name  then entry.skin=eq.Skin.Name   end
+        if eq.Wrap  and eq.Wrap.Name  then entry.wrap=eq.Wrap.Name   end
+        if eq.Charm and eq.Charm.Name then entry.charm=eq.Charm.Name end
+        if next(entry) then data[weapon]=entry end
+    end
+    pcall(writefile,SKINS_SAVE_PATH,HttpService:JSONEncode(data))
+end
+local function loadSkinsFile()
+    local ok,raw=pcall(readfile,SKINS_SAVE_PATH)
+    if ok and raw then
+        local ok2,data=pcall(HttpService.JSONDecode,HttpService,raw)
+        return ok2 and data or {}
+    end
+    return {}
+end
+
+-- // Image helpers
+local imageCache={}
+local function GetWeaponImage(wname)
+    local k="W_"..wname
+    if imageCache[k]~=nil then return imageCache[k] end
+    local id=""
+    pcall(function()
+        local IL=SkinChanger.ItemLibrary
+        if IL and IL.ViewModels and IL.ViewModels[wname] then
+            local vm=IL.ViewModels[wname]; id=vm.ImageCentered or vm.Image or ""
+        end
+    end)
+    imageCache[k]=id; return id
+end
+local function GetSkinImage(name)
+    local k="skin|"..name
+    if imageCache[k]~=nil then return imageCache[k] end
+    local id=""
+    pcall(function()
+        local IL=SkinChanger.ItemLibrary; local CL=SkinChanger.CosmeticLibrary
+        if IL and IL.ViewModels and IL.ViewModels[name] then
+            local vm=IL.ViewModels[name]; id=vm.ImageHighResolution or vm.ImageCentered or vm.Image or ""
+        end
+        if id=="" and CL and CL.Cosmetics and CL.Cosmetics[name] then id=CL.Cosmetics[name].Image or "" end
+    end)
+    imageCache[k]=id; return id
+end
+
+-- // Gun Customization State
+local GunCustomConfig = {
+    highlightEnabled  = false,
+    hlFillColor       = Color3.fromRGB(100,180,255),
+    hlOutlineColor    = Color3.fromRGB(100,180,255),
+    hlFillTransp      = 0,
+    hlOutlineTransp   = 0,
+    materialEnabled   = false,
+    matMaterial       = Enum.Material.Neon,
+    matColor          = Color3.fromRGB(255,105,180),
+    transpEnabled     = false,
+    transpValue       = 0.5,
+    tintEnabled       = false,
+    tintMode          = "static",
+    tintColor         = Color3.fromRGB(0,180,255),
+    tintMultiply      = Color3.fromRGB(120,200,255),
+    tintSpeed         = 0.25,
+    muzzleEnabled     = false,
+    muzzleColor       = Color3.fromRGB(0,255,180),
+    bulletEnabled     = false,
+    bulletWidth0      = 0.15,
+    bulletWidth1      = 0.04,
+    bulletLightEm     = 1,
+    bulletLightInf    = 0,
+    tracerEnabled     = false,
+    tracerColor       = Color3.fromRGB(0,255,180),
+}
+
+local ViewmodelOffsetConfig = {
+    enabled = false,
+    x = 0,
+    y = 0,
+    z = 0,
+}
+
+-- // FighterController helper
+local _cachedFC = nil
+local function GetFC()
+    if _cachedFC then return _cachedFC end
+    local ok,fc=pcall(require,LocalPlayer.PlayerScripts.Controllers.FighterController)
+    if ok and fc then _cachedFC=fc end
+    return _cachedFC
+end
+
+-- // Highlight loop
+local highlightCache={}
+local hlLoop=nil
+local function StartHighlightLoop()
+    if hlLoop then return end
+    local viewmodels=workspace:FindFirstChild("ViewModels"); if not viewmodels then return end
+    local firstperson=viewmodels:FindFirstChild("FirstPerson"); if not firstperson then return end
+    hlLoop=RunService.RenderStepped:Connect(function()
+        if not GunCustomConfig.highlightEnabled then return end
+        for _,model in pairs(firstperson:GetChildren()) do
+            if model:IsA("Model") then
+                local hl=highlightCache[model]
+                if not hl or not hl.Parent then
+                    for _,v in pairs(model:GetChildren()) do if v:IsA("Highlight") then v:Destroy() end end
+                    hl=Instance.new("Highlight")
+                    hl.FillColor=GunCustomConfig.hlFillColor; hl.OutlineColor=GunCustomConfig.hlOutlineColor
+                    hl.FillTransparency=GunCustomConfig.hlFillTransp; hl.OutlineTransparency=GunCustomConfig.hlOutlineTransp
+                    hl.Adornee=model; hl.Parent=model; highlightCache[model]=hl
+                else
+                    hl.FillColor=GunCustomConfig.hlFillColor; hl.OutlineColor=GunCustomConfig.hlOutlineColor
+                    hl.FillTransparency=GunCustomConfig.hlFillTransp; hl.OutlineTransparency=GunCustomConfig.hlOutlineTransp
+                end
+            end
+        end
+        for model,hl in pairs(highlightCache) do
+            if not model.Parent then hl:Destroy(); highlightCache[model]=nil end
+        end
+    end)
+end
+local function StopHighlights()
+    for model,hl in pairs(highlightCache) do pcall(function() hl:Destroy() end) end
+    highlightCache={}
+end
+
+local matLoop=nil
+local function StartMaterialLoop()
+    if matLoop then return end
+    local viewmodels=workspace:FindFirstChild("ViewModels"); if not viewmodels then return end
+    local firstperson=viewmodels:FindFirstChild("FirstPerson"); if not firstperson then return end
+    matLoop=RunService.RenderStepped:Connect(function()
+        if not GunCustomConfig.materialEnabled then return end
+        for _,model in pairs(firstperson:GetChildren()) do
+            if model:IsA("Model") then
+                for _,part in pairs(model:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        local ln=part.Name:lower()
+                        if ln~="leftarm" and ln~="rightarm" then
+                            part.Material=GunCustomConfig.matMaterial; part.Color=GunCustomConfig.matColor
+                            for _,texture in pairs(part:GetChildren()) do
+                                if texture:IsA("Texture") or texture:IsA("Decal") or texture:IsA("SurfaceAppearance") then
+                                    texture.Transparency=1
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+local function StopMaterialLoop()
+    if matLoop then matLoop:Disconnect(); matLoop=nil end
+end
+
+local transpLoop=nil
+local function StartTranspLoop()
+    if transpLoop then return end
+    local viewmodels=workspace:FindFirstChild("ViewModels"); if not viewmodels then return end
+    local firstperson=viewmodels:FindFirstChild("FirstPerson"); if not firstperson then return end
+    transpLoop=RunService.RenderStepped:Connect(function()
+        if not GunCustomConfig.transpEnabled then return end
+        for _,model in pairs(firstperson:GetChildren()) do
+            if model:IsA("Model") then
+                for _,part in pairs(model:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        local ln=part.Name:lower()
+                        if ln~="leftarm" and ln~="rightarm" then
+                            part.Transparency=GunCustomConfig.transpValue
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+local function StopTranspLoop()
+    if transpLoop then transpLoop:Disconnect(); transpLoop=nil end
+end
+
+local _tintActive=false
+local _tintOrigColors={}
+local _tintLastVm=nil
+local function StartTintLoop()
+    if _tintActive then return end
+    _tintActive=true
+    task.spawn(function()
+        local fc
+        for _=1,30 do fc=GetFC(); if fc then break end; task.wait(0.5) end
+        if not fc then _tintActive=false; return end
+        local t=0
+        while _tintActive do
+            t=t+0.016
+            local lf=fc.LocalFighter
+            local item=lf and lf.EquippedItem
+            local vm=item and item.ViewModel
+            if vm~=_tintLastVm then
+                for part,color in pairs(_tintOrigColors) do pcall(function() part.Color=color end) end
+                _tintOrigColors={}
+                if vm and vm.ItemModel then
+                    for _,p in ipairs(vm.ItemModel:GetDescendants()) do
+                        if p:IsA("BasePart") then _tintOrigColors[p]=p.Color end
+                    end
+                end
+                _tintLastVm=vm
+            end
+            if vm and vm.ItemModel then
+                local color
+                local mode=GunCustomConfig.tintMode
+                if mode=="rainbow" then
+                    color=Color3.fromHSV((t*GunCustomConfig.tintSpeed)%1,0.8,1)
+                elseif mode=="multiply" then
+                    color=Color3.fromHSV((t*GunCustomConfig.tintSpeed*0.5)%1,0.5,1)
+                else
+                    color=GunCustomConfig.tintColor
+                end
+                pcall(function()
+                    for _,p in ipairs(vm.ItemModel:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            if mode=="multiply" then
+                                local orig=_tintOrigColors[p]
+                                if orig then p.Color=Color3.new(orig.R*color.R,orig.G*color.G,orig.B*color.B) end
+                            else
+                                p.Color=color
+                            end
+                        end
+                    end
+                end)
+            end
+            task.wait(0.05)
+        end
+        for part,color in pairs(_tintOrigColors) do pcall(function() part.Color=color end) end
+        _tintOrigColors={}; _tintLastVm=nil
+    end)
+end
+local function StopTintLoop() _tintActive=false end
+
+local _muzzleActive=false
+local _muzzlePatched={}
+local function StartMuzzleLoop()
+    if _muzzleActive then return end
+    _muzzleActive=true
+    task.spawn(function()
+        local fc
+        for _=1,30 do fc=GetFC(); if fc then break end; task.wait(0.5) end
+        if not fc then _muzzleActive=false; return end
+        local lastVm=nil
+        while _muzzleActive do
+            local lf=fc.LocalFighter; local item=lf and lf.EquippedItem; local vm=item and item.ViewModel
+            if vm~=lastVm then
+                for particle,orig in pairs(_muzzlePatched) do pcall(function() particle.Color=orig end) end
+                _muzzlePatched={}; lastVm=vm
+            end
+            if vm and vm._muzzle_attachments then
+                local cs=ColorSequence.new(GunCustomConfig.muzzleColor)
+                for _,att in ipairs(vm._muzzle_attachments) do
+                    for _,v in ipairs(att:GetDescendants()) do
+                        if v:IsA("ParticleEmitter") and not _muzzlePatched[v] then
+                            _muzzlePatched[v]=v.Color; v.Color=cs
+                        end
+                    end
+                end
+            end
+            task.wait(0.05)
+        end
+        for particle,orig in pairs(_muzzlePatched) do pcall(function() particle.Color=orig end) end
+        _muzzlePatched={}
+    end)
+end
+local function StopMuzzleLoop() _muzzleActive=false end
+
+local _tracerActive=false
+local _tracerLastVm=nil
+local function StartTracerLoop()
+    if _tracerActive then return end
+    _tracerActive=true
+    task.spawn(function()
+        local fc
+        for _=1,30 do fc=GetFC(); if fc then break end; task.wait(0.5) end
+        if not fc then _tracerActive=false; return end
+        while _tracerActive do
+            local lf=fc.LocalFighter; local item=lf and lf.EquippedItem; local vm=item and item.ViewModel
+            if vm~=_tracerLastVm then
+                if _tracerLastVm then _tracerLastVm.GetFriendlyTracerColor=nil; _tracerLastVm._tracer_patched=nil end
+                if vm and not vm._tracer_patched then
+                    vm._tracer_patched=true
+                    vm.GetFriendlyTracerColor=function() return ColorSequence.new(GunCustomConfig.tracerColor) end
+                end
+                _tracerLastVm=vm
+            end
+            task.wait(0.05)
+        end
+        if _tracerLastVm then _tracerLastVm.GetFriendlyTracerColor=nil; _tracerLastVm._tracer_patched=nil end
+    end)
+end
+local function StopTracerLoop() _tracerActive=false end
+
+local _vmOffsetActive = false
+local function StartViewmodelOffsetLoop()
+    if _vmOffsetActive then return end
+    _vmOffsetActive = true
+    task.spawn(function()
+        while _vmOffsetActive do
+            local viewModels = workspace:FindFirstChild("ViewModels")
+            local firstPerson = viewModels and viewModels:FindFirstChild("FirstPerson")
+            if firstPerson then
+                for _, model in ipairs(firstPerson:GetChildren()) do
+                    if model:IsA("Model") and model.PrimaryPart then
+                        model:SetPrimaryPartCFrame(model.PrimaryPart.CFrame * CFrame.new(
+                            ViewmodelOffsetConfig.x,
+                            ViewmodelOffsetConfig.y,
+                            ViewmodelOffsetConfig.z
+                        ))
+                    end
+                end
+            end
+            RunService.RenderStepped:Wait()
+        end
+    end)
+end
+local function StopViewmodelOffsetLoop() _vmOffsetActive = false end
+
+local _bulletHooked=false
+local function ApplyBulletHook()
+    if _bulletHooked then return end
+    _bulletHooked=true
+    pcall(function()
+        local ps=LocalPlayer:WaitForChild("PlayerScripts")
+        local TracerEffect=require(ps.Modules.TracerEffect)
+        local _origPlay=TracerEffect.Play
+        TracerEffect.Play=function(self2,tracerData,options,state)
+            if GunCustomConfig.bulletEnabled then
+                options=options or {}
+                local bp=options.BeamProperties or {}
+                bp.Width0=GunCustomConfig.bulletWidth0
+                bp.Width1=GunCustomConfig.bulletWidth1
+                bp.LightEmission=GunCustomConfig.bulletLightEm
+                bp.LightInfluence=GunCustomConfig.bulletLightInf
+                options.BeamProperties=bp
+                options.MaxLengthFirstPerson=math.huge
+                options.MaxLength=math.huge
+            end
+            _origPlay(self2,tracerData,options,state)
+        end
+    end)
+end
+
+local allMaterials={"Plastic","SmoothPlastic","Neon","Glass","ForceField","Metal","DiamondPlate","Foil","Wood","WoodPlanks","Marble","Granite","Brick","Cobblestone","Concrete","CorrodedMetal","SandCastle","Glacier","Ice","Fabric","Pebble","Rock","Sand","Grass","Ground","LeafyGrass","Mud","Snow","Salt","Asphalt","Crackedlava","Basalt"}
+table.sort(allMaterials)
+
+-- ============================================================
+-- // UI constants & helpers
+-- ============================================================
+local ScreenGui=Instance.new("ScreenGui")
+ScreenGui.Name="CosmeticChanger"; ScreenGui.ResetOnSpawn=false
+ScreenGui.ZIndexBehavior=Enum.ZIndexBehavior.Global; ScreenGui.IgnoreGuiInset=true
+pcall(function() ScreenGui.Parent=FakeCore end)
+if not ScreenGui.Parent then ScreenGui.Parent=LocalPlayer:WaitForChild("PlayerGui") end
+
+local C={
+    BG      =Color3.fromRGB(20,20,20),
+    Main    =Color3.fromRGB(28,28,28),
+    Accent  =Color3.fromRGB(0,85,255),
+    AccentDk=Color3.fromRGB(0,55,180),
+    Outline =Color3.fromRGB(50,50,50),
+    Font    =Color3.fromRGB(255,255,255),
+    SubFont =Color3.fromRGB(160,160,160),
+    Hover   =Color3.fromRGB(38,38,46),
+    ItemBG  =Color3.fromRGB(24,24,24),
+    ItemBord=Color3.fromRGB(45,45,45),
+    Black   =Color3.new(0,0,0),
+}
+local FONT=Enum.Font.Code
+
+local function Tween(inst,props,t)
+    TweenService:Create(inst,TweenInfo.new(t or 0.12,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),props):Play()
+end
+
+local function MakeDraggable(frame,handle)
+    handle=handle or frame
+    local dragging,dragInput,startPos,startMouse
+    handle.InputBegan:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+            dragging=true; startPos=frame.Position; startMouse=inp.Position
+            inp.Changed:Connect(function()
+                if inp.UserInputState==Enum.UserInputState.End then dragging=false end
+            end)
+        end
+    end)
+    handle.InputChanged:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch then
+            dragInput=inp
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if dragging and inp==dragInput then
+            local delta=inp.Position-startMouse
+            frame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+        end
+    end)
+end
+
+local function MakeLabel(parent,text,size,pos,textsize,color,align,zindex)
+    local lbl=Instance.new("TextLabel")
+    lbl.Size=size or UDim2.new(1,0,1,0); lbl.Position=pos or UDim2.new(0,0,0,0)
+    lbl.BackgroundTransparency=1; lbl.Font=FONT; lbl.Text=text or ""
+    lbl.TextSize=textsize or 14; lbl.TextColor3=color or C.Font
+    lbl.TextXAlignment=align or Enum.TextXAlignment.Left
+    lbl.TextYAlignment=Enum.TextYAlignment.Center
+    lbl.ZIndex=zindex or 5; lbl.Parent=parent
+    local stroke=Instance.new("UIStroke")
+    stroke.Color=Color3.new(0,0,0); stroke.Thickness=1; stroke.Transparency=0.5; stroke.Parent=lbl
+    return lbl
+end
+
+local function MakeScroll(parent,size,pos,zindex)
+    local sf=Instance.new("ScrollingFrame")
+    sf.Size=size; sf.Position=pos or UDim2.new(0,0,0,0)
+    sf.BackgroundTransparency=1; sf.BorderSizePixel=0
+    sf.ScrollBarThickness=3; sf.ScrollBarImageColor3=C.Accent
+    sf.CanvasSize=UDim2.new(0,0,0,0); sf.ZIndex=zindex or 5
+    sf.TopImage="rbxasset://textures/ui/Scroll/scroll-middle.png"
+    sf.BottomImage="rbxasset://textures/ui/Scroll/scroll-middle.png"
+    sf.Parent=parent; return sf
+end
+
+-- ============================================================
+-- // Library-style UI widgets
+-- ============================================================
+
+local function ApplyTextStroke(inst)
+    inst.TextStrokeTransparency = 1
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.new(0,0,0)
+    stroke.Thickness = 1
+    stroke.LineJoinMode = Enum.LineJoinMode.Miter
+    stroke.Parent = inst
+end
+
+local function LibLabel(parent, text, size, pos, textsize, zindex, xalign)
+    local lbl = Instance.new("TextLabel")
+    lbl.BackgroundTransparency = 1
+    lbl.Font = FONT
+    lbl.TextColor3 = C.Font
+    lbl.TextSize = textsize or 14
+    lbl.TextStrokeTransparency = 0
+    lbl.Size = size or UDim2.new(1,0,0,15)
+    lbl.Position = pos or UDim2.new(0,0,0,0)
+    lbl.Text = text or ""
+    lbl.TextXAlignment = xalign or Enum.TextXAlignment.Left
+    lbl.ZIndex = zindex or 5
+    lbl.Parent = parent
+    ApplyTextStroke(lbl)
+    return lbl
+end
+
+-- ── Library-style Toggle ────────────────────────────────────────────────────
+local function LibToggle(parent, labelText, initState, yOffset, containerWidth, onToggle)
+    local toggleOuter = Instance.new("Frame")
+    toggleOuter.BackgroundColor3 = C.Black
+    toggleOuter.BorderColor3 = C.Black
+    toggleOuter.Size = UDim2.fromOffset(13, 13)
+    toggleOuter.Position = UDim2.fromOffset(6, yOffset)
+    toggleOuter.ZIndex = 5
+    toggleOuter.Parent = parent
+
+    local toggleInner = Instance.new("Frame")
+    toggleInner.BackgroundColor3 = initState and C.Accent or C.Main
+    toggleInner.BorderColor3 = initState and C.AccentDk or C.Outline
+    toggleInner.BorderMode = Enum.BorderMode.Inset
+    toggleInner.Size = UDim2.new(1,0,1,0)
+    toggleInner.ZIndex = 6
+    toggleInner.Parent = toggleOuter
+
+    local textLbl = LibLabel(toggleInner, labelText,
+        UDim2.fromOffset(containerWidth - 26, 13),
+        UDim2.fromOffset(16, 0),
+        14, 6, Enum.TextXAlignment.Left)
+    textLbl.TextColor3 = C.Font
+
+    local toggleRegion = Instance.new("Frame")
+    toggleRegion.BackgroundTransparency = 1
+    toggleRegion.Size = UDim2.fromOffset(containerWidth - 6, 13)
+    toggleRegion.ZIndex = 8
+    toggleRegion.Parent = toggleOuter
+
+    local state = initState
+
+    local function refresh()
+        toggleInner.BackgroundColor3 = state and C.Accent or C.Main
+        toggleInner.BorderColor3 = state and C.AccentDk or C.Outline
+    end
+
+    toggleRegion.MouseEnter:Connect(function()
+        if not state then toggleOuter.BorderColor3 = C.Accent end
+    end)
+    toggleRegion.MouseLeave:Connect(function()
+        if not state then toggleOuter.BorderColor3 = C.Black end
+    end)
+
+    toggleRegion.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            state = not state
+            toggleOuter.BorderColor3 = C.Black
+            refresh()
+            onToggle(state)
+        end
+    end)
+
+    refresh()
+
+    local function SetValue(v)
+        state = v
+        refresh()
+    end
+
+    return toggleOuter, SetValue
+end
+
+-- ── Library-style Slider ────────────────────────────────────────────────────
+local function LibSlider(parent, labelText, yOffset, containerWidth, initVal, minVal, maxVal, rounding, suffix, onChanged)
+    LibLabel(parent, labelText,
+        UDim2.new(1,0,0,10),
+        UDim2.fromOffset(6, yOffset),
+        14, 5, Enum.TextXAlignment.Left)
+
+    local sliderMaxSize = containerWidth - 16
+
+    local sliderOuter = Instance.new("Frame")
+    sliderOuter.BackgroundColor3 = C.Black
+    sliderOuter.BorderColor3 = C.Black
+    sliderOuter.Size = UDim2.fromOffset(sliderMaxSize, 13)
+    sliderOuter.Position = UDim2.fromOffset(6, yOffset + 12)
+    sliderOuter.ZIndex = 5
+    sliderOuter.Parent = parent
+
+    local sliderInner = Instance.new("Frame")
+    sliderInner.BackgroundColor3 = C.Main
+    sliderInner.BorderColor3 = C.Outline
+    sliderInner.BorderMode = Enum.BorderMode.Inset
+    sliderInner.Size = UDim2.new(1,0,1,0)
+    sliderInner.ZIndex = 6
+    sliderInner.Parent = sliderOuter
+
+    Instance.new("UIGradient", sliderInner).Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(212,212,212)),
+    })
+
+    local fill = Instance.new("Frame")
+    fill.BackgroundColor3 = C.Accent
+    fill.BorderColor3 = C.AccentDk
+    fill.Size = UDim2.new(0,0,1,0)
+    fill.ZIndex = 7
+    fill.Parent = sliderInner
+
+    local hideBorderRight = Instance.new("Frame")
+    hideBorderRight.BackgroundColor3 = C.Accent
+    hideBorderRight.BorderSizePixel = 0
+    hideBorderRight.Position = UDim2.new(1,0,0,0)
+    hideBorderRight.Size = UDim2.new(0,1,1,0)
+    hideBorderRight.ZIndex = 8
+    hideBorderRight.Parent = fill
+
+    local displayLabel = Instance.new("TextLabel")
+    displayLabel.BackgroundTransparency = 1
+    displayLabel.Size = UDim2.new(1,0,1,0)
+    displayLabel.Font = FONT
+    displayLabel.TextColor3 = C.Font
+    displayLabel.TextSize = 14
+    displayLabel.TextStrokeTransparency = 0
+    displayLabel.ZIndex = 9
+    displayLabel.Parent = sliderInner
+    ApplyTextStroke(displayLabel)
+
+    sliderOuter.MouseEnter:Connect(function() sliderOuter.BorderColor3 = C.Accent end)
+    sliderOuter.MouseLeave:Connect(function() sliderOuter.BorderColor3 = C.Black end)
+
+    local curValue = initVal
+
+    local function MapValue(v, minA, maxA, minB, maxB)
+        return (1 - ((v-minA)/(maxA-minA))) * minB + ((v-minA)/(maxA-minA)) * maxB
+    end
+
+    local function Round(v)
+        if rounding == 0 then return math.floor(v) end
+        return tonumber(string.format("%."..rounding.."f", v))
+    end
+
+    local function Display()
+        local sfx = suffix or ""
+        displayLabel.Text = string.format("%s/%s", curValue..sfx, maxVal..sfx)
+        local x = math.ceil(MapValue(curValue, minVal, maxVal, 0, sliderMaxSize))
+        fill.Size = UDim2.new(0, x, 1, 0)
+        hideBorderRight.Visible = not (x == sliderMaxSize or x == 0)
+    end
+
+    Display()
+
+    sliderInner.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mPosX = Mouse.X
+            local gPos = fill.Size.X.Offset
+            local diff = mPosX - (fill.AbsolutePosition.X + gPos)
+            while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+                local nX = math.clamp(gPos + (Mouse.X - mPosX) + diff, 0, sliderMaxSize)
+                local rel = nX / sliderMaxSize
+                local nVal = Round(minVal + rel * (maxVal - minVal))
+                nVal = math.clamp(nVal, minVal, maxVal)
+                if nVal ~= curValue then
+                    curValue = nVal
+                    Display()
+                    onChanged(curValue)
+                end
+                RunService.RenderStepped:Wait()
+            end
+        end
+    end)
+
+    local function SetValue(v)
+        curValue = math.clamp(Round(v), minVal, maxVal)
+        Display()
+    end
+
+    return sliderOuter, SetValue
+end
+
+-- ── Library-style Dropdown ──────────────────────────────────────────────────
+local _openDropdownClose = nil
+
+local function LibDropdown(parent, labelText, yOffset, containerWidth, items, initialItem, onChanged)
+    if labelText and labelText ~= "" then
+        LibLabel(parent, labelText,
+            UDim2.new(1,0,0,10),
+            UDim2.fromOffset(6, yOffset),
+            14, 5, Enum.TextXAlignment.Left)
+        yOffset = yOffset + 13
+    end
+
+    local ddWidth = containerWidth - 12
+
+    local ddOuter = Instance.new("Frame")
+    ddOuter.BackgroundColor3 = C.Black
+    ddOuter.BorderColor3 = C.Black
+    ddOuter.Size = UDim2.fromOffset(ddWidth, 20)
+    ddOuter.Position = UDim2.fromOffset(6, yOffset)
+    ddOuter.ZIndex = 5
+    ddOuter.Parent = parent
+
+    local ddInner = Instance.new("Frame")
+    ddInner.BackgroundColor3 = C.Main
+    ddInner.BorderColor3 = C.Outline
+    ddInner.BorderMode = Enum.BorderMode.Inset
+    ddInner.Size = UDim2.new(1,0,1,0)
+    ddInner.ZIndex = 6
+    ddInner.Parent = ddOuter
+
+    Instance.new("UIGradient", ddInner).Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(212,212,212)),
+    })
+
+    local arrow = Instance.new("ImageLabel")
+    arrow.AnchorPoint = Vector2.new(0, 0.5)
+    arrow.BackgroundTransparency = 1
+    arrow.Position = UDim2.new(1,-16,0.5,0)
+    arrow.Size = UDim2.fromOffset(12,12)
+    arrow.Image = "http://www.roblox.com/asset/?id=6282522798"
+    arrow.ZIndex = 8
+    arrow.Parent = ddInner
+
+    local itemLabel = Instance.new("TextLabel")
+    itemLabel.BackgroundTransparency = 1
+    itemLabel.Position = UDim2.fromOffset(5,0)
+    itemLabel.Size = UDim2.new(1,-5,1,0)
+    itemLabel.Font = FONT
+    itemLabel.TextColor3 = C.Font
+    itemLabel.TextSize = 14
+    itemLabel.TextStrokeTransparency = 0
+    itemLabel.TextXAlignment = Enum.TextXAlignment.Left
+    itemLabel.TextWrapped = true
+    itemLabel.Text = initialItem or "--"
+    itemLabel.ZIndex = 7
+    itemLabel.Parent = ddInner
+    ApplyTextStroke(itemLabel)
+
+    ddOuter.MouseEnter:Connect(function() ddOuter.BorderColor3 = C.Accent end)
+    ddOuter.MouseLeave:Connect(function() ddOuter.BorderColor3 = C.Black end)
+
+    local MAX_ITEMS = 8
+    local selItem = initialItem
+
+    local listOuter = Instance.new("Frame")
+    listOuter.BackgroundColor3 = C.Black
+    listOuter.BorderColor3 = C.Black
+    listOuter.ZIndex = 20
+    listOuter.Visible = false
+    listOuter.Parent = ScreenGui
+
+    local listInner = Instance.new("Frame")
+    listInner.BackgroundColor3 = C.Main
+    listInner.BorderColor3 = C.Outline
+    listInner.BorderMode = Enum.BorderMode.Inset
+    listInner.BorderSizePixel = 0
+    listInner.Size = UDim2.new(1,0,1,0)
+    listInner.ZIndex = 21
+    listInner.Parent = listOuter
+
+    local scrolling = Instance.new("ScrollingFrame")
+    scrolling.BackgroundTransparency = 1
+    scrolling.BorderSizePixel = 0
+    scrolling.CanvasSize = UDim2.new(0,0,0,0)
+    scrolling.Size = UDim2.new(1,0,1,0)
+    scrolling.ZIndex = 21
+    scrolling.TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+    scrolling.BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+    scrolling.ScrollBarThickness = 3
+    scrolling.ScrollBarImageColor3 = C.Accent
+    scrolling.Parent = listInner
+
+    Instance.new("UIListLayout", scrolling).SortOrder = Enum.SortOrder.LayoutOrder
+
+    local function RecalcPos()
+        listOuter.Position = UDim2.fromOffset(ddOuter.AbsolutePosition.X, ddOuter.AbsolutePosition.Y + 21)
+    end
+    local function RecalcSize(ySize)
+        listOuter.Size = UDim2.fromOffset(ddOuter.AbsoluteSize.X, ySize or MAX_ITEMS*20+2)
+    end
+    RecalcPos(); RecalcSize()
+    ddOuter:GetPropertyChangedSignal("AbsolutePosition"):Connect(RecalcPos)
+
+    local function CloseDropdown()
+        listOuter.Visible = false
+        arrow.Rotation = 0
+        if _openDropdownClose == CloseDropdown then
+            _openDropdownClose = nil
+        end
+    end
+
+    local function BuildList()
+        for _, ch in pairs(scrolling:GetChildren()) do
+            if not ch:IsA("UIListLayout") then ch:Destroy() end
+        end
+        local count = 0
+        for _, val in ipairs(items) do
+            count += 1
+            local btn = Instance.new("Frame")
+            btn.BackgroundColor3 = C.Main
+            btn.BorderColor3 = C.Outline
+            btn.BorderMode = Enum.BorderMode.Middle
+            btn.Size = UDim2.new(1,-1,0,20)
+            btn.ZIndex = 23
+            btn.Active = true
+            btn.LayoutOrder = count
+            btn.Parent = scrolling
+
+            local btnLabel = Instance.new("TextLabel")
+            btnLabel.BackgroundTransparency = 1
+            btnLabel.Position = UDim2.fromOffset(6,0)
+            btnLabel.Size = UDim2.new(1,-6,1,0)
+            btnLabel.Font = FONT
+            btnLabel.TextColor3 = (val == selItem) and C.Accent or C.Font
+            btnLabel.TextSize = 14
+            btnLabel.TextStrokeTransparency = 0
+            btnLabel.TextXAlignment = Enum.TextXAlignment.Left
+            btnLabel.Text = val
+            btnLabel.ZIndex = 25
+            btnLabel.Parent = btn
+            ApplyTextStroke(btnLabel)
+
+            local thisVal = val
+            btn.MouseEnter:Connect(function()
+                if thisVal ~= selItem then btn.BorderColor3 = C.Accent; btn.ZIndex = 24 end
+            end)
+            btn.MouseLeave:Connect(function()
+                if thisVal ~= selItem then btn.BorderColor3 = C.Outline; btn.ZIndex = 23 end
+            end)
+            btn.InputBegan:Connect(function(inp)
+                if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+                    selItem = thisVal
+                    itemLabel.Text = thisVal
+                    onChanged(thisVal)
+                    CloseDropdown()
+                    BuildList()
+                end
+            end)
+        end
+        scrolling.CanvasSize = UDim2.fromOffset(0, count*20+1)
+        local y = math.clamp(count*20, 0, MAX_ITEMS*20) + 1
+        RecalcSize(y)
+    end
+    BuildList()
+
+    ddOuter.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            if listOuter.Visible then
+                CloseDropdown()
+            else
+                if _openDropdownClose then _openDropdownClose() end
+                _openDropdownClose = CloseDropdown
+                RecalcPos()
+                listOuter.Visible = true
+                arrow.Rotation = 180
+            end
+        end
+    end)
+
+    UserInputService.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            local ap, as = listOuter.AbsolutePosition, listOuter.AbsoluteSize
+            if Mouse.X < ap.X or Mouse.X > ap.X+as.X or Mouse.Y < (ap.Y-21) or Mouse.Y > ap.Y+as.Y then
+                CloseDropdown()
+            end
+        end
+    end)
+
+    local function SetValue(v)
+        selItem = v
+        itemLabel.Text = v or "--"
+        BuildList()
+    end
+
+    return ddOuter, SetValue
+end
+
+-- ── Library-style Color Picker ──────────────────────────────────────────────
+local function LibColorPicker(parent, labelText, yOffset, initColor, hasTransparency, initTransp, onChanged)
+    local curColor = initColor
+    local transparency = initTransp or 0
+
+    local function GetDarker(c)
+        local h,s,v = Color3.toHSV(c)
+        return Color3.fromHSV(h,s,v/1.5)
+    end
+
+    -- Row label
+    LibLabel(parent, labelText,
+        UDim2.new(1,0,0,14),
+        UDim2.fromOffset(6, yOffset+1),
+        14, 5, Enum.TextXAlignment.Left)
+
+    -- Swatch display frame
+    local displayFrame = Instance.new("Frame")
+    displayFrame.BackgroundColor3 = curColor
+    displayFrame.BorderColor3 = GetDarker(curColor)
+    displayFrame.BorderMode = Enum.BorderMode.Inset
+    displayFrame.Size = UDim2.fromOffset(28, 14)
+    displayFrame.Position = UDim2.fromOffset(TextService:GetTextSize(labelText, 14, FONT, Vector2.new(1920,1080)).X + 12, yOffset + 2)
+    displayFrame.ZIndex = 6
+    displayFrame.Parent = parent
+
+    if hasTransparency then
+        local checker = Instance.new("ImageLabel")
+        checker.BorderSizePixel = 0
+        checker.Size = UDim2.fromOffset(27,13)
+        checker.ZIndex = 5
+        checker.Image = "http://www.roblox.com/asset/?id=12977615774"
+        checker.BackgroundTransparency = 1
+        checker.Parent = displayFrame
+    end
+
+    local pickerH = hasTransparency and 271 or 253
+    local pickerOuter = Instance.new("Frame")
+    pickerOuter.Name = "Color"
+    pickerOuter.BackgroundColor3 = Color3.new(1,1,1)
+    pickerOuter.BorderColor3 = Color3.new(0,0,0)
+    pickerOuter.Size = UDim2.fromOffset(230, pickerH)
+    pickerOuter.Visible = false
+    pickerOuter.ZIndex = 15
+    pickerOuter.Parent = ScreenGui
+
+    local function RecalcPickerPos()
+        pickerOuter.Position = UDim2.fromOffset(displayFrame.AbsolutePosition.X, displayFrame.AbsolutePosition.Y + 18)
+    end
+    RecalcPickerPos()
+    displayFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(RecalcPickerPos)
+
+    local pickerInner = Instance.new("Frame")
+    pickerInner.BackgroundColor3 = C.BG
+    pickerInner.BorderColor3 = C.Outline
+    pickerInner.BorderMode = Enum.BorderMode.Inset
+    pickerInner.Size = UDim2.new(1,0,1,0)
+    pickerInner.ZIndex = 16
+    pickerInner.Parent = pickerOuter
+
+    local hlBar = Instance.new("Frame")
+    hlBar.BackgroundColor3 = C.Accent; hlBar.BorderSizePixel = 0
+    hlBar.Size = UDim2.new(1,0,0,2); hlBar.ZIndex = 17; hlBar.Parent = pickerInner
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.BackgroundTransparency = 1; titleLbl.Font = FONT
+    titleLbl.TextColor3 = C.Font; titleLbl.TextSize = 14; titleLbl.TextStrokeTransparency = 0
+    titleLbl.Position = UDim2.fromOffset(5,5); titleLbl.Size = UDim2.new(1,0,0,14)
+    titleLbl.Text = labelText; titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.ZIndex = 16; titleLbl.Parent = pickerInner
+    ApplyTextStroke(titleLbl)
+
+    local svOuter = Instance.new("Frame")
+    svOuter.BorderColor3 = Color3.new(0,0,0)
+    svOuter.Position = UDim2.fromOffset(4,25); svOuter.Size = UDim2.fromOffset(200,200)
+    svOuter.ZIndex = 17; svOuter.Parent = pickerInner
+
+    local svInner = Instance.new("Frame")
+    svInner.BackgroundColor3 = C.BG; svInner.BorderColor3 = C.Outline
+    svInner.BorderMode = Enum.BorderMode.Inset; svInner.Size = UDim2.new(1,0,1,0)
+    svInner.ZIndex = 18; svInner.Parent = svOuter
+
+    local svMap = Instance.new("ImageLabel")
+    svMap.BorderSizePixel = 0; svMap.Size = UDim2.new(1,0,1,0)
+    svMap.ZIndex = 18; svMap.Image = "rbxassetid://4155801252"; svMap.Parent = svInner
+
+    local cursorOuter = Instance.new("ImageLabel")
+    cursorOuter.AnchorPoint = Vector2.new(0.5,0.5); cursorOuter.Size = UDim2.fromOffset(6,6)
+    cursorOuter.BackgroundTransparency = 1; cursorOuter.Image = "http://www.roblox.com/asset/?id=9619665977"
+    cursorOuter.ImageColor3 = Color3.new(0,0,0); cursorOuter.ZIndex = 19; cursorOuter.Parent = svMap
+
+    local cursorInner = Instance.new("ImageLabel")
+    cursorInner.Size = UDim2.fromOffset(4,4); cursorInner.Position = UDim2.fromOffset(1,1)
+    cursorInner.BackgroundTransparency = 1; cursorInner.Image = "http://www.roblox.com/asset/?id=9619665977"
+    cursorInner.ZIndex = 20; cursorInner.Parent = cursorOuter
+
+    local hueSelectorOuter = Instance.new("Frame")
+    hueSelectorOuter.BorderColor3 = Color3.new(0,0,0)
+    hueSelectorOuter.Position = UDim2.fromOffset(208,25); hueSelectorOuter.Size = UDim2.fromOffset(15,200)
+    hueSelectorOuter.ZIndex = 17; hueSelectorOuter.Parent = pickerInner
+
+    local hueSelectorInner = Instance.new("Frame")
+    hueSelectorInner.BackgroundColor3 = Color3.new(1,1,1); hueSelectorInner.BorderSizePixel = 0
+    hueSelectorInner.Size = UDim2.new(1,0,1,0); hueSelectorInner.ZIndex = 18; hueSelectorInner.Parent = hueSelectorOuter
+
+    local hueCursor = Instance.new("Frame")
+    hueCursor.BackgroundColor3 = Color3.new(1,1,1); hueCursor.AnchorPoint = Vector2.new(0,0.5)
+    hueCursor.BorderColor3 = Color3.new(0,0,0); hueCursor.Size = UDim2.new(1,0,0,1)
+    hueCursor.ZIndex = 18; hueCursor.Parent = hueSelectorInner
+
+    local hueGradientSeq = {}
+    for h = 0, 1, 1/6 do
+        table.insert(hueGradientSeq, ColorSequenceKeypoint.new(math.min(h,1), Color3.fromHSV(math.min(h,1),1,1)))
+    end
+    local hueGrad = Instance.new("UIGradient")
+    hueGrad.Color = ColorSequence.new(hueGradientSeq); hueGrad.Rotation = 90; hueGrad.Parent = hueSelectorInner
+
+    local hueBoxOuter = Instance.new("Frame")
+    hueBoxOuter.BorderColor3 = Color3.new(0,0,0)
+    hueBoxOuter.Position = UDim2.fromOffset(4,228); hueBoxOuter.Size = UDim2.new(0.5,-6,0,20)
+    hueBoxOuter.ZIndex = 18; hueBoxOuter.Parent = pickerInner
+
+    local hueBoxInner = Instance.new("Frame")
+    hueBoxInner.BackgroundColor3 = C.Main; hueBoxInner.BorderColor3 = C.Outline
+    hueBoxInner.BorderMode = Enum.BorderMode.Inset; hueBoxInner.Size = UDim2.new(1,0,1,0)
+    hueBoxInner.ZIndex = 18; hueBoxInner.Parent = hueBoxOuter
+
+    Instance.new("UIGradient", hueBoxInner).Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(212,212,212)),
+    })
+
+    local hexBox = Instance.new("TextBox")
+    hexBox.BackgroundTransparency = 1; hexBox.Position = UDim2.fromOffset(5,0)
+    hexBox.Size = UDim2.new(1,-5,1,0); hexBox.Font = FONT
+    hexBox.PlaceholderColor3 = Color3.fromRGB(190,190,190); hexBox.PlaceholderText = "Hex color"
+    hexBox.Text = "#FFFFFF"; hexBox.TextColor3 = C.Font
+    hexBox.TextSize = 14; hexBox.TextStrokeTransparency = 0
+    hexBox.TextXAlignment = Enum.TextXAlignment.Left; hexBox.ZIndex = 20; hexBox.Parent = hueBoxInner
+    ApplyTextStroke(hexBox)
+
+    local rgbBoxOuter = Instance.new("Frame")
+    rgbBoxOuter.BorderColor3 = Color3.new(0,0,0)
+    rgbBoxOuter.Position = UDim2.new(0.5,2,0,228); rgbBoxOuter.Size = UDim2.new(0.5,-6,0,20)
+    rgbBoxOuter.ZIndex = 18; rgbBoxOuter.Parent = pickerInner
+
+    local rgbBoxInner = Instance.new("Frame")
+    rgbBoxInner.BackgroundColor3 = C.Main; rgbBoxInner.BorderColor3 = C.Outline
+    rgbBoxInner.BorderMode = Enum.BorderMode.Inset; rgbBoxInner.Size = UDim2.new(1,0,1,0)
+    rgbBoxInner.ZIndex = 18; rgbBoxInner.Parent = rgbBoxOuter
+
+    Instance.new("UIGradient", rgbBoxInner).Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(212,212,212)),
+    })
+
+    local rgbBox = Instance.new("TextBox")
+    rgbBox.BackgroundTransparency = 1; rgbBox.Position = UDim2.fromOffset(5,0)
+    rgbBox.Size = UDim2.new(1,-5,1,0); rgbBox.Font = FONT
+    rgbBox.PlaceholderColor3 = Color3.fromRGB(190,190,190); rgbBox.PlaceholderText = "RGB color"
+    rgbBox.Text = "255, 255, 255"; rgbBox.TextColor3 = C.Font
+    rgbBox.TextSize = 14; rgbBox.TextStrokeTransparency = 0
+    rgbBox.TextXAlignment = Enum.TextXAlignment.Left; rgbBox.ZIndex = 20; rgbBox.Parent = rgbBoxInner
+    ApplyTextStroke(rgbBox)
+
+    local transpOuter, transpInner, transpCursor
+    if hasTransparency then
+        transpOuter = Instance.new("Frame")
+        transpOuter.BorderColor3 = Color3.new(0,0,0)
+        transpOuter.Position = UDim2.fromOffset(4,251); transpOuter.Size = UDim2.new(1,-8,0,15)
+        transpOuter.ZIndex = 19; transpOuter.Parent = pickerInner
+
+        transpInner = Instance.new("Frame")
+        transpInner.BackgroundColor3 = curColor; transpInner.BorderColor3 = C.Outline
+        transpInner.BorderMode = Enum.BorderMode.Inset; transpInner.Size = UDim2.new(1,0,1,0)
+        transpInner.ZIndex = 19; transpInner.Parent = transpOuter
+
+        local checkerImg = Instance.new("ImageLabel")
+        checkerImg.BackgroundTransparency = 1; checkerImg.Size = UDim2.new(1,0,1,0)
+        checkerImg.Image = "http://www.roblox.com/asset/?id=12978095818"; checkerImg.ZIndex = 20; checkerImg.Parent = transpInner
+
+        transpCursor = Instance.new("Frame")
+        transpCursor.BackgroundColor3 = Color3.new(1,1,1); transpCursor.AnchorPoint = Vector2.new(0.5,0)
+        transpCursor.BorderColor3 = Color3.new(0,0,0); transpCursor.Size = UDim2.fromOffset(1,15)
+        transpCursor.ZIndex = 21; transpCursor.Parent = transpInner
+    end
+
+    MakeDraggable(pickerOuter)
+
+    local pH, pS, pV = Color3.toHSV(initColor)
+
+    local function DisplayPicker()
+        curColor = Color3.fromHSV(pH, pS, pV)
+        svMap.BackgroundColor3 = Color3.fromHSV(pH,1,1)
+
+        displayFrame.BackgroundColor3 = curColor
+        displayFrame.BackgroundTransparency = transparency
+        displayFrame.BorderColor3 = GetDarker(curColor)
+
+        if transpInner then
+            transpInner.BackgroundColor3 = curColor
+            transpCursor.Position = UDim2.new(1-transparency,0,0,0)
+        end
+
+        cursorOuter.Position = UDim2.new(pS,0,1-pV,0)
+        hueCursor.Position = UDim2.new(0,0,pH,0)
+
+        hexBox.Text = "#"..curColor:ToHex()
+        rgbBox.Text = math.floor(curColor.R*255)..", "..math.floor(curColor.G*255)..", "..math.floor(curColor.B*255)
+
+        onChanged(curColor, transparency)
+    end
+
+    hexBox.FocusLost:Connect(function(enter)
+        if enter then
+            local ok, res = pcall(Color3.fromHex, hexBox.Text)
+            if ok and typeof(res) == "Color3" then
+                pH, pS, pV = Color3.toHSV(res)
+            end
+        end
+        DisplayPicker()
+    end)
+
+    rgbBox.FocusLost:Connect(function(enter)
+        if enter then
+            local r,g,b = rgbBox.Text:match("(%d+),%s*(%d+),%s*(%d+)")
+            if r and g and b then pH, pS, pV = Color3.toHSV(Color3.fromRGB(r,g,b)) end
+        end
+        DisplayPicker()
+    end)
+
+    svMap.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+                local minX = svMap.AbsolutePosition.X; local maxX = minX + svMap.AbsoluteSize.X
+                local minY = svMap.AbsolutePosition.Y; local maxY = minY + svMap.AbsoluteSize.Y
+                pS = (math.clamp(Mouse.X, minX, maxX)-minX)/(maxX-minX)
+                pV = 1-((math.clamp(Mouse.Y, minY, maxY)-minY)/(maxY-minY))
+                DisplayPicker()
+                RunService.RenderStepped:Wait()
+            end
+        end
+    end)
+
+    hueSelectorInner.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+                local minY = hueSelectorInner.AbsolutePosition.Y; local maxY = minY + hueSelectorInner.AbsoluteSize.Y
+                pH = (math.clamp(Mouse.Y, minY, maxY)-minY)/(maxY-minY)
+                DisplayPicker()
+                RunService.RenderStepped:Wait()
+            end
+        end
+    end)
+
+    if transpInner then
+        transpInner.InputBegan:Connect(function(inp)
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+                while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+                    local minX = transpInner.AbsolutePosition.X; local maxX = minX + transpInner.AbsoluteSize.X
+                    transparency = 1 - (math.clamp(Mouse.X,minX,maxX)-minX)/(maxX-minX)
+                    DisplayPicker()
+                    RunService.RenderStepped:Wait()
+                end
+            end
+        end)
+    end
+
+    local pickerOpen = false
+    displayFrame.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            if pickerOpen then
+                pickerOuter.Visible = false; pickerOpen = false
+            else
+                for _, obj in pairs(ScreenGui:GetChildren()) do
+                    if obj.Name == "Color" and obj ~= pickerOuter then obj.Visible = false end
+                end
+                RecalcPickerPos()
+                pickerOuter.Visible = true; pickerOpen = true
+            end
+        end
+    end)
+
+    UserInputService.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            local ap, as = pickerOuter.AbsolutePosition, pickerOuter.AbsoluteSize
+            if Mouse.X < ap.X or Mouse.X > ap.X+as.X or Mouse.Y < (ap.Y-20) or Mouse.Y > ap.Y+as.Y then
+                if pickerOpen then pickerOuter.Visible = false; pickerOpen = false end
+            end
+        end
+    end)
+
+    DisplayPicker()
+
+    local function SetValue(col, transp)
+        pH, pS, pV = Color3.toHSV(col)
+        if transp ~= nil then transparency = transp end
+        DisplayPicker()
+    end
+
+    return displayFrame, SetValue
+end
+
+-- ============================================================
+-- // Layout sizes
+-- ============================================================
+local VP=workspace.CurrentCamera.ViewportSize
+local IS_SMALL=VP.X<640
+local WIN_W=IS_SMALL and math.min(VP.X-16,480) or 600
+local WIN_H=IS_SMALL and math.min(VP.Y-60,500) or 480
+local LEFT_W=IS_SMALL and math.floor(WIN_W*0.43) or 270
+local CELL_W=IS_SMALL and 64 or 80
+local CELL_H=IS_SMALL and 66 or 80
+local RCELL_W=IS_SMALL and 70 or 90
+
+local function GetCellH(ctype) return ctype=="skin" and (IS_SMALL and 66 or 80) or 34 end
+local function TypeUsesImage(ctype) return ctype=="skin" end
+
+-- ============================================================
+-- // Main window
+-- ============================================================
+local MainOuter=Instance.new("Frame")
+MainOuter.Size=UDim2.fromOffset(WIN_W,WIN_H)
+MainOuter.Position=IS_SMALL and UDim2.fromOffset(8,28) or UDim2.fromOffset(160,60)
+MainOuter.BackgroundColor3=C.Black; MainOuter.BorderSizePixel=0; MainOuter.ZIndex=1; MainOuter.Parent=ScreenGui
+
+local MainInner=Instance.new("Frame")
+MainInner.Size=UDim2.new(1,-2,1,-2); MainInner.Position=UDim2.new(0,1,0,1)
+MainInner.BackgroundColor3=C.Main; MainInner.BorderSizePixel=0; MainInner.ZIndex=2; MainInner.Parent=MainOuter
+
+local TopAccent=Instance.new("Frame")
+TopAccent.Size=UDim2.new(1,0,0,2); TopAccent.BackgroundColor3=C.Accent
+TopAccent.BorderSizePixel=0; TopAccent.ZIndex=3; TopAccent.Parent=MainInner
+
+local TitleBar=Instance.new("Frame")
+TitleBar.Size=UDim2.new(1,0,0,25); TitleBar.Position=UDim2.new(0,0,0,2)
+TitleBar.BackgroundColor3=C.Main; TitleBar.BorderSizePixel=0; TitleBar.ZIndex=3; TitleBar.Parent=MainInner
+MakeLabel(TitleBar,"Cosmetic Changer",UDim2.new(1,-100,1,0),UDim2.new(0,7,0,0),14,C.Font,Enum.TextXAlignment.Left,4)
+
+local KBOuter=Instance.new("Frame")
+KBOuter.Size=UDim2.fromOffset(84,18); KBOuter.Position=UDim2.new(1,-88,0,3)
+KBOuter.BackgroundColor3=C.Black; KBOuter.BorderSizePixel=0; KBOuter.ZIndex=4; KBOuter.Parent=TitleBar
+local KBInner=Instance.new("Frame")
+KBInner.Size=UDim2.new(1,-2,1,-2); KBInner.Position=UDim2.new(0,1,0,1)
+KBInner.BackgroundColor3=C.ItemBG; KBInner.BorderSizePixel=0; KBInner.ZIndex=5; KBInner.Parent=KBOuter
+Instance.new("UIGradient",KBInner).Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.new(1,1,1)),ColorSequenceKeypoint.new(1,Color3.fromRGB(212,212,212))})
+local currentKeybind="RightShift"
+local KBLabel=MakeLabel(KBInner,"["..currentKeybind.."]",UDim2.new(1,0,1,0),UDim2.new(0,0,0,0),10,C.SubFont,Enum.TextXAlignment.Center,6)
+local KBBtn=Instance.new("TextButton")
+KBBtn.Size=UDim2.new(1,0,1,0); KBBtn.BackgroundTransparency=1; KBBtn.Text=""; KBBtn.ZIndex=7; KBBtn.Parent=KBOuter
+local pickingKey=false
+KBBtn.MouseButton1Click:Connect(function()
+    if pickingKey then return end
+    pickingKey=true; KBLabel.Text="..."; KBLabel.TextColor3=C.Accent
+    local conn; conn=UserInputService.InputBegan:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.Keyboard then
+            currentKeybind=inp.KeyCode.Name
+            KBLabel.Text="["..currentKeybind.."]"; KBLabel.TextColor3=C.SubFont
+            pickingKey=false; conn:Disconnect()
+        end
+    end)
+end)
+KBOuter.MouseEnter:Connect(function() Tween(KBInner,{BackgroundColor3=C.Hover},0.1) end)
+KBOuter.MouseLeave:Connect(function() Tween(KBInner,{BackgroundColor3=C.ItemBG},0.1) end)
+MakeDraggable(MainOuter,TitleBar)
+
+local Sep=Instance.new("Frame")
+Sep.Size=UDim2.new(1,-16,0,1); Sep.Position=UDim2.new(0,8,0,27)
+Sep.BackgroundColor3=C.Outline; Sep.BorderSizePixel=0; Sep.ZIndex=3; Sep.Parent=MainInner
+
+-- // Tab bar
+local TabBar=Instance.new("Frame")
+TabBar.Size=UDim2.new(1,-16,0,22); TabBar.Position=UDim2.new(0,8,0,30)
+TabBar.BackgroundColor3=C.BG; TabBar.BorderColor3=C.Outline; TabBar.BorderSizePixel=1; TabBar.ZIndex=3; TabBar.Parent=MainInner
+local TabBarLayout=Instance.new("UIListLayout")
+TabBarLayout.FillDirection=Enum.FillDirection.Horizontal; TabBarLayout.SortOrder=Enum.SortOrder.LayoutOrder; TabBarLayout.Parent=TabBar
+
+local function MakeMainTab(name,order)
+    local tbo=Instance.new("Frame"); tbo.Size=UDim2.new(0,120,1,0); tbo.BackgroundColor3=C.Black
+    tbo.BorderSizePixel=0; tbo.ZIndex=4; tbo.LayoutOrder=order; tbo.Parent=TabBar
+    local tbi=Instance.new("Frame"); tbi.Size=UDim2.new(1,-2,1,-2); tbi.Position=UDim2.new(0,1,0,1)
+    tbi.BackgroundColor3=C.ItemBG; tbi.BorderSizePixel=0; tbi.ZIndex=5; tbi.Parent=tbo
+    MakeLabel(tbi,name,UDim2.new(1,0,1,0),UDim2.new(0,0,0,0),10,C.Font,Enum.TextXAlignment.Center,6)
+    local btn=Instance.new("TextButton"); btn.Size=UDim2.new(1,0,1,0); btn.BackgroundTransparency=1; btn.Text=""; btn.ZIndex=7; btn.Parent=tbo
+    return {outer=tbo,inner=tbi,btn=btn}
+end
+
+local tabCosm=MakeMainTab("cosmetics",1)
+local tabGunC=MakeMainTab("gun customization",2)
+local activeMainTab="cosmetics"
+tabCosm.inner.BackgroundColor3=C.Accent
+
+local ContentArea=Instance.new("Frame")
+ContentArea.Size=UDim2.new(1,-16,1,-58); ContentArea.Position=UDim2.new(0,8,0,54)
+ContentArea.BackgroundColor3=C.BG; ContentArea.BorderColor3=C.Outline; ContentArea.BorderSizePixel=1; ContentArea.ZIndex=2; ContentArea.Parent=MainInner
+
+-- ============================================================
+-- // Cosmetics panel
+-- ============================================================
+local CosmeticsPanel=Instance.new("Frame")
+CosmeticsPanel.Size=UDim2.new(1,0,1,0); CosmeticsPanel.BackgroundTransparency=1; CosmeticsPanel.ZIndex=2; CosmeticsPanel.Parent=ContentArea
+
+local LeftPanel=Instance.new("Frame")
+LeftPanel.Size=UDim2.new(0,LEFT_W,1,-8); LeftPanel.Position=UDim2.new(0,4,0,4)
+LeftPanel.BackgroundColor3=C.Main; LeftPanel.BorderColor3=C.Outline; LeftPanel.BorderSizePixel=1; LeftPanel.ZIndex=3; LeftPanel.Parent=CosmeticsPanel
+
+local LPA=Instance.new("Frame"); LPA.Size=UDim2.new(1,0,0,2); LPA.BackgroundColor3=C.Accent; LPA.BorderSizePixel=0; LPA.ZIndex=4; LPA.Parent=LeftPanel
+MakeLabel(LeftPanel,"weapon filter",UDim2.new(1,-8,0,12),UDim2.new(0,4,0,4),10,C.SubFont,Enum.TextXAlignment.Left,4)
+
+local WFO=Instance.new("Frame"); WFO.Size=UDim2.new(1,-8,0,18); WFO.Position=UDim2.new(0,4,0,16)
+WFO.BackgroundColor3=C.Black; WFO.BorderSizePixel=0; WFO.ZIndex=4; WFO.Parent=LeftPanel
+local WFI=Instance.new("Frame"); WFI.Size=UDim2.new(1,-2,1,-2); WFI.Position=UDim2.new(0,1,0,1)
+WFI.BackgroundColor3=C.ItemBG; WFI.BorderSizePixel=0; WFI.ZIndex=5; WFI.Parent=WFO
+local WFilter=Instance.new("TextBox")
+WFilter.Size=UDim2.new(1,-6,1,0); WFilter.Position=UDim2.new(0,4,0,0)
+WFilter.BackgroundTransparency=1; WFilter.Font=FONT; WFilter.PlaceholderText="filter weapons..."
+WFilter.PlaceholderColor3=C.SubFont; WFilter.Text=""; WFilter.TextColor3=C.Font
+WFilter.TextSize=11; WFilter.TextXAlignment=Enum.TextXAlignment.Left; WFilter.ZIndex=6; WFilter.Parent=WFI
+
+local WeaponScroll=MakeScroll(LeftPanel,UDim2.new(1,-4,1,-40),UDim2.new(0,2,0,36),4)
+local WeaponGrid=Instance.new("Frame"); WeaponGrid.Size=UDim2.new(1,0,1,0); WeaponGrid.BackgroundTransparency=1; WeaponGrid.ZIndex=5; WeaponGrid.Parent=WeaponScroll
+local WGL=Instance.new("UIGridLayout"); WGL.CellSize=UDim2.fromOffset(CELL_W,CELL_H); WGL.CellPadding=UDim2.fromOffset(4,4); WGL.SortOrder=Enum.SortOrder.LayoutOrder; WGL.Parent=WeaponGrid
+Instance.new("UIPadding",WeaponGrid).PaddingLeft=UDim.new(0,4)
+
+local RightPanel=Instance.new("Frame")
+RightPanel.Size=UDim2.new(1,-(LEFT_W+14),1,-8); RightPanel.Position=UDim2.new(0,LEFT_W+10,0,4)
+RightPanel.BackgroundColor3=C.Main; RightPanel.BorderColor3=C.Outline; RightPanel.BorderSizePixel=1; RightPanel.ZIndex=3; RightPanel.Parent=CosmeticsPanel
+
+local RPA=Instance.new("Frame"); RPA.Size=UDim2.new(1,0,0,2); RPA.BackgroundColor3=C.Accent; RPA.BorderSizePixel=0; RPA.ZIndex=4; RPA.Parent=RightPanel
+MakeLabel(RightPanel,"cosmetic filter",UDim2.new(1,-8,0,12),UDim2.new(0,4,0,4),10,C.SubFont,Enum.TextXAlignment.Left,4)
+
+local CFO=Instance.new("Frame"); CFO.Size=UDim2.new(1,-8,0,18); CFO.Position=UDim2.new(0,4,0,16)
+CFO.BackgroundColor3=C.Black; CFO.BorderSizePixel=0; CFO.ZIndex=4; CFO.Parent=RightPanel
+local CFI=Instance.new("Frame"); CFI.Size=UDim2.new(1,-2,1,-2); CFI.Position=UDim2.new(0,1,0,1)
+CFI.BackgroundColor3=C.ItemBG; CFI.BorderSizePixel=0; CFI.ZIndex=5; CFI.Parent=CFO
+local CFilter=Instance.new("TextBox")
+CFilter.Size=UDim2.new(1,-6,1,0); CFilter.Position=UDim2.new(0,4,0,0)
+CFilter.BackgroundTransparency=1; CFilter.Font=FONT; CFilter.PlaceholderText="filter cosmetics..."
+CFilter.PlaceholderColor3=C.SubFont; CFilter.Text=""; CFilter.TextColor3=C.Font
+CFilter.TextSize=11; CFilter.TextXAlignment=Enum.TextXAlignment.Left; CFilter.ZIndex=6; CFilter.Parent=CFI
+
+local TypeTabs=Instance.new("Frame"); TypeTabs.Size=UDim2.new(1,-8,0,20); TypeTabs.Position=UDim2.new(0,4,0,36)
+TypeTabs.BackgroundTransparency=1; TypeTabs.ZIndex=4; TypeTabs.Parent=RightPanel
+local TTL=Instance.new("UIListLayout"); TTL.FillDirection=Enum.FillDirection.Horizontal; TTL.Padding=UDim.new(0,2); TTL.SortOrder=Enum.SortOrder.LayoutOrder; TTL.Parent=TypeTabs
+
+local cosTypes={"skin","wrap","charm"}; local selCosType="skin"; local typeTabs={}; local RefreshCosmeticGrid
+
+for i,tn in ipairs(cosTypes) do
+    local to=Instance.new("Frame"); to.Size=UDim2.new(0,58,1,0); to.BackgroundColor3=C.Black
+    to.BorderSizePixel=0; to.ZIndex=5; to.LayoutOrder=i; to.Parent=TypeTabs
+    local ti=Instance.new("Frame"); ti.Size=UDim2.new(1,-2,1,-2); ti.Position=UDim2.new(0,1,0,1)
+    ti.BackgroundColor3=(tn=="skin") and C.Accent or C.ItemBG; ti.BorderSizePixel=0; ti.ZIndex=6; ti.Parent=to
+    MakeLabel(ti,tn,UDim2.new(1,0,1,0),UDim2.new(0,0,0,0),11,C.Font,Enum.TextXAlignment.Center,7)
+    local btn=Instance.new("TextButton"); btn.Size=UDim2.new(1,0,1,0); btn.BackgroundTransparency=1; btn.Text=""; btn.ZIndex=8; btn.Parent=to
+    typeTabs[tn]={outer=to,inner=ti}
+    local thisType=tn
+    btn.MouseButton1Click:Connect(function()
+        selCosType=thisType
+        for t2,tb in pairs(typeTabs) do Tween(tb.inner,{BackgroundColor3=(t2==thisType) and C.Accent or C.ItemBG},0.1) end
+        RefreshCosmeticGrid()
+    end)
+end
+
+local CosScroll=MakeScroll(RightPanel,UDim2.new(1,-4,1,-98),UDim2.new(0,2,0,58),4)
+local CosGrid=Instance.new("Frame"); CosGrid.Size=UDim2.new(1,0,1,0); CosGrid.BackgroundTransparency=1; CosGrid.ZIndex=5; CosGrid.Parent=CosScroll
+local CGL=Instance.new("UIGridLayout"); CGL.CellSize=UDim2.fromOffset(RCELL_W,GetCellH("skin")); CGL.CellPadding=UDim2.fromOffset(4,4); CGL.SortOrder=Enum.SortOrder.LayoutOrder; CGL.Parent=CosGrid
+Instance.new("UIPadding",CosGrid).PaddingLeft=UDim.new(0,4)
+
+local BotBar=Instance.new("Frame"); BotBar.Size=UDim2.new(1,-8,0,36); BotBar.Position=UDim2.new(0,4,1,-40)
+BotBar.BackgroundTransparency=1; BotBar.ZIndex=4; BotBar.Parent=RightPanel
+local AAO=Instance.new("Frame"); AAO.Size=UDim2.new(1,0,0,18); AAO.BackgroundColor3=C.Black; AAO.BorderSizePixel=0; AAO.ZIndex=5; AAO.Parent=BotBar
+local AAI=Instance.new("Frame"); AAI.Size=UDim2.new(1,-2,1,-2); AAI.Position=UDim2.new(0,1,0,1)
+AAI.BackgroundColor3=C.ItemBG; AAI.BorderSizePixel=0; AAI.ZIndex=6; AAI.Parent=AAO
+Instance.new("UIGradient",AAI).Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.new(1,1,1)),ColorSequenceKeypoint.new(1,Color3.fromRGB(212,212,212))})
+MakeLabel(AAI,"apply selected to all",UDim2.new(1,0,1,0),UDim2.new(0,0,0,0),11,C.Font,Enum.TextXAlignment.Center,7)
+local AABtn=Instance.new("TextButton"); AABtn.Size=UDim2.new(1,0,1,0); AABtn.BackgroundTransparency=1; AABtn.Text=""; AABtn.ZIndex=8; AABtn.Parent=AAO
+AAO.MouseEnter:Connect(function() Tween(AAI,{BackgroundColor3=C.Hover},0.1) end)
+AAO.MouseLeave:Connect(function() Tween(AAI,{BackgroundColor3=C.ItemBG},0.1) end)
+local HintRow=Instance.new("Frame"); HintRow.Size=UDim2.new(1,0,0,16); HintRow.Position=UDim2.new(0,0,0,19)
+HintRow.BackgroundTransparency=1; HintRow.ZIndex=4; HintRow.Parent=BotBar
+MakeLabel(HintRow,"right click weapon to remove skin",UDim2.new(1,0,1,0),UDim2.new(0,0,0,0),9,C.SubFont,Enum.TextXAlignment.Center,5)
+
+-- ============================================================
+-- // Gun Customization Panel — color pickers inline with toggles
+-- ============================================================
+local GunCustPanel=Instance.new("Frame")
+GunCustPanel.Size=UDim2.new(1,0,1,0); GunCustPanel.BackgroundTransparency=1
+GunCustPanel.Visible=false; GunCustPanel.ZIndex=2; GunCustPanel.Parent=ContentArea
+
+local GunCustScroll=MakeScroll(GunCustPanel,UDim2.new(1,-8,1,-8),UDim2.new(0,4,0,4),3)
+GunCustScroll.ScrollBarThickness=4
+
+local GCW = WIN_W - 16 - 16
+
+-- Helper: section container
+local function MakeSection(parent, yOff, title)
+    local outer = Instance.new("Frame")
+    outer.BackgroundColor3 = C.BG
+    outer.BorderColor3 = C.Outline
+    outer.BorderMode = Enum.BorderMode.Inset
+    outer.Size = UDim2.new(1,-8, 0, 100)
+    outer.Position = UDim2.fromOffset(4, yOff)
+    outer.ZIndex = 4
+    outer.Parent = parent
+
+    local inner = Instance.new("Frame")
+    inner.BackgroundColor3 = C.BG
+    inner.BorderColor3 = C.Black
+    inner.Size = UDim2.new(1,-2,1,-2); inner.Position = UDim2.new(0,1,0,1)
+    inner.ZIndex = 4; inner.Parent = outer
+
+    local hlBar = Instance.new("Frame")
+    hlBar.BackgroundColor3 = C.Accent; hlBar.BorderSizePixel = 0
+    hlBar.Size = UDim2.new(1,0,0,2); hlBar.ZIndex = 5; hlBar.Parent = inner
+
+    LibLabel(inner, title,
+        UDim2.new(1,0,0,18), UDim2.fromOffset(4,2),
+        14, 5, Enum.TextXAlignment.Left)
+
+    local container = Instance.new("Frame")
+    container.BackgroundTransparency = 1
+    container.Position = UDim2.fromOffset(0, 20)
+    container.Size = UDim2.new(1,0,1,-22)
+    container.ZIndex = 5
+    container.Parent = inner
+
+    local function SetHeight(h)
+        outer.Size = UDim2.new(1,-8,0,h)
+    end
+
+    return container, SetHeight, outer
+end
+
+-- Helper: toggle row with one or more inline color pickers on the right
+-- colorDefs = array of {label, initColor, onChanged}
+-- Returns the toggle frame. Row height = 18.
+local function LibToggleWithColors(parent, labelText, initState, yOffset, containerWidth, onToggle, colorDefs)
+    -- Checkbox
+    local toggleOuter = Instance.new("Frame")
+    toggleOuter.BackgroundColor3 = C.Black
+    toggleOuter.BorderColor3 = C.Black
+    toggleOuter.Size = UDim2.fromOffset(13, 13)
+    toggleOuter.Position = UDim2.fromOffset(6, yOffset + 2)
+    toggleOuter.ZIndex = 5
+    toggleOuter.Parent = parent
+
+    local toggleInner = Instance.new("Frame")
+    toggleInner.BackgroundColor3 = initState and C.Accent or C.Main
+    toggleInner.BorderColor3 = initState and C.AccentDk or C.Outline
+    toggleInner.BorderMode = Enum.BorderMode.Inset
+    toggleInner.Size = UDim2.new(1,0,1,0)
+    toggleInner.ZIndex = 6
+    toggleInner.Parent = toggleOuter
+
+    -- Label right of checkbox
+    local textLbl = LibLabel(toggleInner, labelText,
+        UDim2.fromOffset(containerWidth - 26, 13),
+        UDim2.fromOffset(16, 0),
+        14, 6, Enum.TextXAlignment.Left)
+    textLbl.TextColor3 = C.Font
+
+    -- Click region (covers checkbox + label text)
+    local toggleRegion = Instance.new("Frame")
+    toggleRegion.BackgroundTransparency = 1
+    toggleRegion.Size = UDim2.fromOffset(containerWidth - 6, 13)
+    toggleRegion.ZIndex = 8
+    toggleRegion.Parent = toggleOuter
+
+    local state = initState
+    local function refresh()
+        toggleInner.BackgroundColor3 = state and C.Accent or C.Main
+        toggleInner.BorderColor3 = state and C.AccentDk or C.Outline
+    end
+    toggleRegion.MouseEnter:Connect(function()
+        if not state then toggleOuter.BorderColor3 = C.Accent end
+    end)
+    toggleRegion.MouseLeave:Connect(function()
+        if not state then toggleOuter.BorderColor3 = C.Black end
+    end)
+    toggleRegion.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            state = not state
+            toggleOuter.BorderColor3 = C.Black
+            refresh()
+            onToggle(state)
+        end
+    end)
+    refresh()
+
+    -- Inline color pickers stacked vertically from the right edge
+    -- Each swatch is 28x14, placed right-aligned, with a small label above it
+    -- We place them to the right of the label text in the same row area
+    if colorDefs then
+        local swatchX = containerWidth - 6  -- right edge of container
+        for i = #colorDefs, 1, -1 do
+            local cd = colorDefs[i]
+            swatchX = swatchX - 32  -- 28px swatch + 4px gap
+
+            -- The actual swatch (LibColorPicker needs parent+yOffset, returns displayFrame)
+            -- We'll manually create a mini swatch since LibColorPicker positions by yOffset
+            local function GetDarker(c)
+                local h,s,v = Color3.toHSV(c)
+                return Color3.fromHSV(h,s,v/1.5)
+            end
+
+            local swatchFrame = Instance.new("Frame")
+            swatchFrame.BackgroundColor3 = cd.initColor
+            swatchFrame.BorderColor3 = GetDarker(cd.initColor)
+            swatchFrame.BorderMode = Enum.BorderMode.Inset
+            swatchFrame.Size = UDim2.fromOffset(28, 14)
+            swatchFrame.Position = UDim2.fromOffset(swatchX, yOffset + 1)
+            swatchFrame.ZIndex = 6
+            swatchFrame.Parent = parent
+
+            -- Full picker popup (reuse LibColorPicker logic inline)
+            local curColor = cd.initColor
+            local pickerOuter = Instance.new("Frame")
+            pickerOuter.Name = "Color"
+            pickerOuter.BackgroundColor3 = Color3.new(1,1,1)
+            pickerOuter.BorderColor3 = Color3.new(0,0,0)
+            pickerOuter.Size = UDim2.fromOffset(230, 253)
+            pickerOuter.Visible = false
+            pickerOuter.ZIndex = 15
+            pickerOuter.Parent = ScreenGui
+
+            local function RecalcPickerPos()
+                pickerOuter.Position = UDim2.fromOffset(swatchFrame.AbsolutePosition.X, swatchFrame.AbsolutePosition.Y + 18)
+            end
+            RecalcPickerPos()
+            swatchFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(RecalcPickerPos)
+
+            local pickerInner = Instance.new("Frame")
+            pickerInner.BackgroundColor3 = C.BG; pickerInner.BorderColor3 = C.Outline
+            pickerInner.BorderMode = Enum.BorderMode.Inset; pickerInner.Size = UDim2.new(1,0,1,0)
+            pickerInner.ZIndex = 16; pickerInner.Parent = pickerOuter
+
+            local phlBar = Instance.new("Frame")
+            phlBar.BackgroundColor3 = C.Accent; phlBar.BorderSizePixel = 0
+            phlBar.Size = UDim2.new(1,0,0,2); phlBar.ZIndex = 17; phlBar.Parent = pickerInner
+
+            local titleLbl2 = Instance.new("TextLabel")
+            titleLbl2.BackgroundTransparency = 1; titleLbl2.Font = FONT
+            titleLbl2.TextColor3 = C.Font; titleLbl2.TextSize = 14; titleLbl2.TextStrokeTransparency = 0
+            titleLbl2.Position = UDim2.fromOffset(5,5); titleLbl2.Size = UDim2.new(1,0,0,14)
+            titleLbl2.Text = cd.label; titleLbl2.TextXAlignment = Enum.TextXAlignment.Left
+            titleLbl2.ZIndex = 16; titleLbl2.Parent = pickerInner
+            ApplyTextStroke(titleLbl2)
+
+            local svOuter2 = Instance.new("Frame")
+            svOuter2.BorderColor3 = Color3.new(0,0,0)
+            svOuter2.Position = UDim2.fromOffset(4,25); svOuter2.Size = UDim2.fromOffset(200,200)
+            svOuter2.ZIndex = 17; svOuter2.Parent = pickerInner
+
+            local svInner2 = Instance.new("Frame")
+            svInner2.BackgroundColor3 = C.BG; svInner2.BorderColor3 = C.Outline
+            svInner2.BorderMode = Enum.BorderMode.Inset; svInner2.Size = UDim2.new(1,0,1,0)
+            svInner2.ZIndex = 18; svInner2.Parent = svOuter2
+
+            local svMap2 = Instance.new("ImageLabel")
+            svMap2.BorderSizePixel = 0; svMap2.Size = UDim2.new(1,0,1,0)
+            svMap2.ZIndex = 18; svMap2.Image = "rbxassetid://4155801252"; svMap2.Parent = svInner2
+
+            local cursor2 = Instance.new("ImageLabel")
+            cursor2.AnchorPoint = Vector2.new(0.5,0.5); cursor2.Size = UDim2.fromOffset(6,6)
+            cursor2.BackgroundTransparency = 1; cursor2.Image = "http://www.roblox.com/asset/?id=9619665977"
+            cursor2.ImageColor3 = Color3.new(0,0,0); cursor2.ZIndex = 19; cursor2.Parent = svMap2
+
+            local hueOuter2 = Instance.new("Frame")
+            hueOuter2.BorderColor3 = Color3.new(0,0,0)
+            hueOuter2.Position = UDim2.fromOffset(208,25); hueOuter2.Size = UDim2.fromOffset(15,200)
+            hueOuter2.ZIndex = 17; hueOuter2.Parent = pickerInner
+
+            local hueInner2 = Instance.new("Frame")
+            hueInner2.BackgroundColor3 = Color3.new(1,1,1); hueInner2.BorderSizePixel = 0
+            hueInner2.Size = UDim2.new(1,0,1,0); hueInner2.ZIndex = 18; hueInner2.Parent = hueOuter2
+
+            local hueCursor2 = Instance.new("Frame")
+            hueCursor2.BackgroundColor3 = Color3.new(1,1,1); hueCursor2.AnchorPoint = Vector2.new(0,0.5)
+            hueCursor2.BorderColor3 = Color3.new(0,0,0); hueCursor2.Size = UDim2.new(1,0,0,1)
+            hueCursor2.ZIndex = 18; hueCursor2.Parent = hueInner2
+
+            local hgSeq = {}
+            for h = 0, 1, 1/6 do table.insert(hgSeq, ColorSequenceKeypoint.new(math.min(h,1), Color3.fromHSV(math.min(h,1),1,1))) end
+            local hg2 = Instance.new("UIGradient")
+            hg2.Color = ColorSequence.new(hgSeq); hg2.Rotation = 90; hg2.Parent = hueInner2
+
+            -- Hex box
+            local hbOuter2 = Instance.new("Frame")
+            hbOuter2.BorderColor3 = Color3.new(0,0,0)
+            hbOuter2.Position = UDim2.fromOffset(4,228); hbOuter2.Size = UDim2.new(0.5,-6,0,20)
+            hbOuter2.ZIndex = 18; hbOuter2.Parent = pickerInner
+            local hbInner2 = Instance.new("Frame")
+            hbInner2.BackgroundColor3 = C.Main; hbInner2.BorderColor3 = C.Outline
+            hbInner2.BorderMode = Enum.BorderMode.Inset; hbInner2.Size = UDim2.new(1,0,1,0)
+            hbInner2.ZIndex = 18; hbInner2.Parent = hbOuter2
+            Instance.new("UIGradient", hbInner2).Color = ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.new(1,1,1)),ColorSequenceKeypoint.new(1,Color3.fromRGB(212,212,212))})
+            local hexBox2 = Instance.new("TextBox")
+            hexBox2.BackgroundTransparency = 1; hexBox2.Position = UDim2.fromOffset(5,0)
+            hexBox2.Size = UDim2.new(1,-5,1,0); hexBox2.Font = FONT
+            hexBox2.PlaceholderColor3 = Color3.fromRGB(190,190,190); hexBox2.PlaceholderText = "Hex"
+            hexBox2.Text = "#FFFFFF"; hexBox2.TextColor3 = C.Font
+            hexBox2.TextSize = 14; hexBox2.TextStrokeTransparency = 0
+            hexBox2.TextXAlignment = Enum.TextXAlignment.Left; hexBox2.ZIndex = 20; hexBox2.Parent = hbInner2
+            ApplyTextStroke(hexBox2)
+
+            -- RGB box
+            local rbOuter2 = Instance.new("Frame")
+            rbOuter2.BorderColor3 = Color3.new(0,0,0)
+            rbOuter2.Position = UDim2.new(0.5,2,0,228); rbOuter2.Size = UDim2.new(0.5,-6,0,20)
+            rbOuter2.ZIndex = 18; rbOuter2.Parent = pickerInner
+            local rbInner2 = Instance.new("Frame")
+            rbInner2.BackgroundColor3 = C.Main; rbInner2.BorderColor3 = C.Outline
+            rbInner2.BorderMode = Enum.BorderMode.Inset; rbInner2.Size = UDim2.new(1,0,1,0)
+            rbInner2.ZIndex = 18; rbInner2.Parent = rbOuter2
+            Instance.new("UIGradient", rbInner2).Color = ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.new(1,1,1)),ColorSequenceKeypoint.new(1,Color3.fromRGB(212,212,212))})
+            local rgbBox2 = Instance.new("TextBox")
+            rgbBox2.BackgroundTransparency = 1; rgbBox2.Position = UDim2.fromOffset(5,0)
+            rgbBox2.Size = UDim2.new(1,-5,1,0); rgbBox2.Font = FONT
+            rgbBox2.PlaceholderColor3 = Color3.fromRGB(190,190,190); rgbBox2.PlaceholderText = "RGB"
+            rgbBox2.Text = "255, 255, 255"; rgbBox2.TextColor3 = C.Font
+            rgbBox2.TextSize = 14; rgbBox2.TextStrokeTransparency = 0
+            rgbBox2.TextXAlignment = Enum.TextXAlignment.Left; rgbBox2.ZIndex = 20; rgbBox2.Parent = rbInner2
+            ApplyTextStroke(rgbBox2)
+
+            MakeDraggable(pickerOuter)
+
+            local pH2, pS2, pV2 = Color3.toHSV(cd.initColor)
+
+            local function DisplayPicker2()
+                curColor = Color3.fromHSV(pH2, pS2, pV2)
+                svMap2.BackgroundColor3 = Color3.fromHSV(pH2,1,1)
+                swatchFrame.BackgroundColor3 = curColor
+                swatchFrame.BorderColor3 = GetDarker(curColor)
+                cursor2.Position = UDim2.new(pS2,0,1-pV2,0)
+                hueCursor2.Position = UDim2.new(0,0,pH2,0)
+                hexBox2.Text = "#"..curColor:ToHex()
+                rgbBox2.Text = math.floor(curColor.R*255)..", "..math.floor(curColor.G*255)..", "..math.floor(curColor.B*255)
+                cd.onChanged(curColor)
+            end
+
+            hexBox2.FocusLost:Connect(function(enter)
+                if enter then local ok,res=pcall(Color3.fromHex,hexBox2.Text); if ok then pH2,pS2,pV2=Color3.toHSV(res) end end
+                DisplayPicker2()
+            end)
+            rgbBox2.FocusLost:Connect(function(enter)
+                if enter then local r,g,b=rgbBox2.Text:match("(%d+),%s*(%d+),%s*(%d+)"); if r then pH2,pS2,pV2=Color3.toHSV(Color3.fromRGB(r,g,b)) end end
+                DisplayPicker2()
+            end)
+            svMap2.InputBegan:Connect(function(inp)
+                if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+                    while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+                        local minX=svMap2.AbsolutePosition.X; local maxX=minX+svMap2.AbsoluteSize.X
+                        local minY=svMap2.AbsolutePosition.Y; local maxY=minY+svMap2.AbsoluteSize.Y
+                        pS2=(math.clamp(Mouse.X,minX,maxX)-minX)/(maxX-minX)
+                        pV2=1-((math.clamp(Mouse.Y,minY,maxY)-minY)/(maxY-minY))
+                        DisplayPicker2(); RunService.RenderStepped:Wait()
+                    end
+                end
+            end)
+            hueInner2.InputBegan:Connect(function(inp)
+                if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+                    while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+                        local minY=hueInner2.AbsolutePosition.Y; local maxY=minY+hueInner2.AbsoluteSize.Y
+                        pH2=(math.clamp(Mouse.Y,minY,maxY)-minY)/(maxY-minY)
+                        DisplayPicker2(); RunService.RenderStepped:Wait()
+                    end
+                end
+            end)
+
+            local pickerOpen2 = false
+            swatchFrame.InputBegan:Connect(function(inp)
+                if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+                    if pickerOpen2 then
+                        pickerOuter.Visible=false; pickerOpen2=false
+                    else
+                        for _,obj in pairs(ScreenGui:GetChildren()) do
+                            if obj.Name=="Color" and obj~=pickerOuter then obj.Visible=false end
+                        end
+                        RecalcPickerPos(); pickerOuter.Visible=true; pickerOpen2=true
+                    end
+                end
+            end)
+            UserInputService.InputBegan:Connect(function(inp)
+                if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+                    local ap,as=pickerOuter.AbsolutePosition,pickerOuter.AbsoluteSize
+                    if Mouse.X<ap.X or Mouse.X>ap.X+as.X or Mouse.Y<(ap.Y-20) or Mouse.Y>ap.Y+as.Y then
+                        if pickerOpen2 then pickerOuter.Visible=false; pickerOpen2=false end
+                    end
+                end
+            end)
+
+            DisplayPicker2()
+        end
+    end
+
+    local function SetValue(v)
+        state = v; refresh()
+    end
+
+    -- Row height is 18 (13px checkbox + 2 padding top/bottom)
+    return toggleOuter, SetValue
+end
+
+local gcY = 4
+
+-- ── Gun Highlight ─────────────────────────────────────────────────────────
+do
+    local con, setH = MakeSection(GunCustScroll, gcY, "Gun Highlight")
+    local y = 4
+    -- Toggle row with fill + outline color pickers inline
+    LibToggleWithColors(con, "Enable", false, y, GCW-8, function(s)
+        GunCustomConfig.highlightEnabled = s
+        if s then StartHighlightLoop() else StopHighlights() end
+    end, {
+        {label="fill",    initColor=GunCustomConfig.hlFillColor,    onChanged=function(c) GunCustomConfig.hlFillColor=c end},
+        {label="outline", initColor=GunCustomConfig.hlOutlineColor, onChanged=function(c) GunCustomConfig.hlOutlineColor=c end},
+    })
+    y = y + 20
+    LibSlider(con, "Fill Transparency", y, GCW-8, 0, 0, 1, 2, "", function(v)
+        GunCustomConfig.hlFillTransp = v
+    end)
+    y = y + 31
+    LibSlider(con, "Outline Transparency", y, GCW-8, 0, 0, 1, 2, "", function(v)
+        GunCustomConfig.hlOutlineTransp = v
+    end)
+    y = y + 31 + 6
+    setH(20 + y)
+    gcY = gcY + 20 + y + 10
+end
+
+-- ── Gun Material ──────────────────────────────────────────────────────────
+do
+    local con, setH = MakeSection(GunCustScroll, gcY, "Gun Material")
+    local y = 4
+    LibToggleWithColors(con, "Enable", false, y, GCW-8, function(s)
+        GunCustomConfig.materialEnabled = s
+        if s then StartMaterialLoop() else StopMaterialLoop() end
+    end, {
+        {label="color", initColor=GunCustomConfig.matColor, onChanged=function(c) GunCustomConfig.matColor=c end},
+    })
+    y = y + 20
+    LibDropdown(con, "Material", y, GCW-8, allMaterials, "Neon", function(n)
+        local ok, mat = pcall(function() return Enum.Material[n] end)
+        if ok and mat then GunCustomConfig.matMaterial = mat end
+    end)
+    y = y + 13 + 20 + 8
+    setH(20 + y)
+    gcY = gcY + 20 + y + 10
+end
+
+-- ── Gun Transparency ──────────────────────────────────────────────────────
+do
+    local con, setH = MakeSection(GunCustScroll, gcY, "Gun Transparency")
+    local y = 4
+    LibToggle(con, "Enable", false, y, GCW-8, function(s)
+        GunCustomConfig.transpEnabled = s
+        if s then StartTranspLoop() else StopTranspLoop() end
+    end)
+    y = y + 20
+    LibSlider(con, "Transparency", y, GCW-8, 0.5, 0, 1, 2, "", function(v)
+        GunCustomConfig.transpValue = v
+    end)
+    y = y + 31 + 6
+    setH(20 + y)
+    gcY = gcY + 20 + y + 10
+end
+
+-- ── Gun Tint ──────────────────────────────────────────────────────────────
+do
+    local con, setH = MakeSection(GunCustScroll, gcY, "Gun Tint")
+    local y = 4
+    LibToggleWithColors(con, "Enable", false, y, GCW-8, function(s)
+        GunCustomConfig.tintEnabled = s
+        if s then StartTintLoop() else StopTintLoop() end
+    end, {
+        {label="color", initColor=GunCustomConfig.tintColor, onChanged=function(c) GunCustomConfig.tintColor=c end},
+    })
+    y = y + 20
+    LibDropdown(con, "Mode", y, GCW-8, {"static","rainbow","multiply"}, "static", function(n)
+        GunCustomConfig.tintMode = n
+    end)
+    y = y + 13 + 20 + 8
+    LibSlider(con, "Speed", y, GCW-8, 0.25, 0.01, 2, 2, "", function(v)
+        GunCustomConfig.tintSpeed = v
+    end)
+    y = y + 31 + 6
+    setH(20 + y)
+    gcY = gcY + 20 + y + 10
+end
+
+-- ── Muzzle Colour ─────────────────────────────────────────────────────────
+do
+    local con, setH = MakeSection(GunCustScroll, gcY, "Muzzle Colour")
+    local y = 4
+    LibToggleWithColors(con, "Enable", false, y, GCW-8, function(s)
+        GunCustomConfig.muzzleEnabled = s
+        if s then StartMuzzleLoop() else StopMuzzleLoop() end
+    end, {
+        {label="color", initColor=GunCustomConfig.muzzleColor, onChanged=function(c) GunCustomConfig.muzzleColor=c end},
+    })
+    y = y + 20 + 6
+    setH(20 + y)
+    gcY = gcY + 20 + y + 10
+end
+
+-- ── Bullet Modifier ───────────────────────────────────────────────────────
+do
+    local con, setH = MakeSection(GunCustScroll, gcY, "Bullet Modifier")
+    local y = 4
+    LibToggle(con, "Enable", false, y, GCW-8, function(s)
+        GunCustomConfig.bulletEnabled = s
+        if s then ApplyBulletHook() end
+    end)
+    y = y + 20
+    LibSlider(con, "Width Start", y, GCW-8, 0.15, 0.01, 1, 2, "", function(v)
+        GunCustomConfig.bulletWidth0 = v
+    end)
+    y = y + 31
+    LibSlider(con, "Width End", y, GCW-8, 0.04, 0, 0.5, 2, "", function(v)
+        GunCustomConfig.bulletWidth1 = v
+    end)
+    y = y + 31
+    LibSlider(con, "Light Emission", y, GCW-8, 1, 0, 1, 2, "", function(v)
+        GunCustomConfig.bulletLightEm = v
+    end)
+    y = y + 31
+    LibSlider(con, "Light Influence", y, GCW-8, 0, 0, 1, 2, "", function(v)
+        GunCustomConfig.bulletLightInf = v
+    end)
+    y = y + 31 + 6
+    setH(20 + y)
+    gcY = gcY + 20 + y + 10
+end
+
+-- ── Tracer Colour ─────────────────────────────────────────────────────────
+do
+    local con, setH = MakeSection(GunCustScroll, gcY, "Tracer Colour")
+    local y = 4
+    LibToggleWithColors(con, "Enable", false, y, GCW-8, function(s)
+        GunCustomConfig.tracerEnabled = s
+        if s then StartTracerLoop() else StopTracerLoop() end
+    end, {
+        {label="color", initColor=GunCustomConfig.tracerColor, onChanged=function(c) GunCustomConfig.tracerColor=c end},
+    })
+    y = y + 20 + 6
+    setH(20 + y)
+    gcY = gcY + 20 + y + 10
+end
+
+-- ── Viewmodel Offset ──────────────────────────────────────────────────────
+do
+    local con, setH = MakeSection(GunCustScroll, gcY, "Viewmodel Offset")
+    local y = 4
+    LibToggle(con, "Enable", false, y, GCW-8, function(s)
+        ViewmodelOffsetConfig.enabled = s
+        if s then StartViewmodelOffsetLoop() else StopViewmodelOffsetLoop() end
+    end)
+    y = y + 20
+    LibSlider(con, "X (Left / Right)", y, GCW-8, 0, -2, 2, 2, "", function(v)
+        ViewmodelOffsetConfig.x = v
+    end)
+    y = y + 31
+    LibSlider(con, "Y (Up / Down)", y, GCW-8, 0, -2, 2, 2, "", function(v)
+        ViewmodelOffsetConfig.y = v
+    end)
+    y = y + 31
+    LibSlider(con, "Z (Forward / Back)", y, GCW-8, 0, -2, 2, 2, "", function(v)
+        ViewmodelOffsetConfig.z = v
+    end)
+    y = y + 31 + 6
+    setH(20 + y)
+    gcY = gcY + 20 + y + 10
+end
+
+GunCustScroll.CanvasSize = UDim2.new(0,0,0, gcY + 10)
+
+
+-- ============================================================
+-- // Main tab switching
+-- ============================================================
+local function SetMainTab(tab)
+    activeMainTab=tab
+    if tab=="cosmetics" then
+        CosmeticsPanel.Visible=true; GunCustPanel.Visible=false
+        Tween(tabCosm.inner,{BackgroundColor3=C.Accent},0.1); Tween(tabGunC.inner,{BackgroundColor3=C.ItemBG},0.1)
+    else
+        CosmeticsPanel.Visible=false; GunCustPanel.Visible=true
+        Tween(tabCosm.inner,{BackgroundColor3=C.ItemBG},0.1); Tween(tabGunC.inner,{BackgroundColor3=C.Accent},0.1)
+    end
+end
+tabCosm.btn.MouseButton1Click:Connect(function() SetMainTab("cosmetics") end)
+tabGunC.btn.MouseButton1Click:Connect(function() SetMainTab("gun") end)
+tabCosm.btn.MouseEnter:Connect(function() if activeMainTab~="cosmetics" then Tween(tabCosm.inner,{BackgroundColor3=C.Hover},0.08) end end)
+tabCosm.btn.MouseLeave:Connect(function() if activeMainTab~="cosmetics" then Tween(tabCosm.inner,{BackgroundColor3=C.ItemBG},0.08) end end)
+tabGunC.btn.MouseEnter:Connect(function() if activeMainTab~="gun" then Tween(tabGunC.inner,{BackgroundColor3=C.Hover},0.08) end end)
+tabGunC.btn.MouseLeave:Connect(function() if activeMainTab~="gun" then Tween(tabGunC.inner,{BackgroundColor3=C.ItemBG},0.08) end end)
+
+-- ============================================================
+-- // Weapon + Cosmetic grids
+-- ============================================================
+local selWeapon=nil; local selCosmetic=nil; local wCells={}; local cCells={}
+local weaponOrder={}
+for wname in pairs(WeaponSkins) do table.insert(weaponOrder,wname) end
+table.sort(weaponOrder)
+
+local function BuildWeaponGrid(filter)
+    for _,c in pairs(wCells) do if c and c.frame then c.frame:Destroy() end end
+    wCells={}; local idx=0
+    for _,wname in ipairs(weaponOrder) do
+        if not filter or filter=="" or wname:lower():find(filter:lower(),1,true) then
+            idx+=1
+            local cell=Instance.new("Frame"); cell.Size=UDim2.fromOffset(CELL_W,CELL_H)
+            cell.BackgroundColor3=(selWeapon==wname) and C.Accent or C.ItemBG
+            cell.BorderColor3=(selWeapon==wname) and C.Accent or C.ItemBord
+            cell.BorderSizePixel=1; cell.ZIndex=6; cell.LayoutOrder=idx; cell.Parent=WeaponGrid
+            local img=Instance.new("ImageLabel"); img.Size=UDim2.fromOffset(CELL_W-12,CELL_H-26)
+            img.Position=UDim2.new(0.5,-(CELL_W-12)/2,0,3); img.BackgroundTransparency=1; img.Image=""
+            img.ScaleType=Enum.ScaleType.Fit; img.ZIndex=7; img.Parent=cell
+            local nl=MakeLabel(cell,wname,UDim2.new(1,-2,0,20),UDim2.new(0,1,1,-21),9,C.Font,Enum.TextXAlignment.Center,7)
+            nl.TextWrapped=true
+            local btn=Instance.new("TextButton"); btn.Size=UDim2.new(1,0,1,0); btn.BackgroundTransparency=1; btn.Text=""; btn.ZIndex=8; btn.Parent=cell
+            local thisName=wname
+            local cached=imageCache["W_"..thisName]
+            if cached and cached~="" then img.Image=cached
+            else task.defer(function() local id=GetWeaponImage(thisName); if id~="" and img and img.Parent then img.Image=id end end) end
+            btn.MouseEnter:Connect(function() if selWeapon~=thisName then Tween(cell,{BackgroundColor3=C.Hover,BorderColor3=C.Accent},0.1) end end)
+            btn.MouseLeave:Connect(function() if selWeapon~=thisName then Tween(cell,{BackgroundColor3=C.ItemBG,BorderColor3=C.ItemBord},0.1) end end)
+            btn.MouseButton1Click:Connect(function()
+                if wCells[selWeapon] then Tween(wCells[selWeapon].frame,{BackgroundColor3=C.ItemBG,BorderColor3=C.ItemBord},0.1) end
+                selWeapon=thisName; selCosmetic=nil; Tween(cell,{BackgroundColor3=C.Accent,BorderColor3=C.Accent},0.1); RefreshCosmeticGrid()
+            end)
+            btn.MouseButton2Click:Connect(function()
+                if SkinChanger.equipped[thisName] then
+                    SkinChanger.equipped[thisName].Skin=nil
+                    task.defer(function()
+                        if wCells[thisName] then local id=GetWeaponImage(thisName); if id~="" then wCells[thisName].img.Image=id end end
+                    end)
+                end
+            end)
+            wCells[wname]={frame=cell,img=img}
+        end
+    end
+    WeaponScroll.CanvasSize=UDim2.new(0,0,0,WGL.AbsoluteContentSize.Y+8)
+end
+
+RefreshCosmeticGrid=function()
+    for _,c in pairs(cCells) do if c and c.frame then c.frame:Destroy() end end
+    cCells={}; local items={}; local ft=CFilter.Text:lower()
+    local useImage=TypeUsesImage(selCosType); local cellH=GetCellH(selCosType)
+    CGL.CellSize=UDim2.fromOffset(RCELL_W,cellH)
+    if selCosType=="skin" then
+        if not selWeapon then CosScroll.CanvasSize=UDim2.new(0,0,0,0); return end
+        items=WeaponSkins[selWeapon] or {}
+    elseif selCosType=="wrap" then items=allWraps
+    elseif selCosType=="charm" then items=allCharms end
+    local idx=0
+    for _,itemName in ipairs(items) do
+        if ft=="" or itemName:lower():find(ft,1,true) then
+            idx+=1
+            local cell=Instance.new("Frame"); cell.Size=UDim2.fromOffset(RCELL_W,cellH)
+            cell.BackgroundColor3=C.ItemBG; cell.BorderColor3=C.ItemBord; cell.BorderSizePixel=1; cell.ZIndex=6; cell.LayoutOrder=idx; cell.Parent=CosGrid
+            local img=nil
+            if useImage then
+                img=Instance.new("ImageLabel"); img.Size=UDim2.fromOffset(RCELL_W-12,cellH-22)
+                img.Position=UDim2.new(0.5,-(RCELL_W-12)/2,0,2); img.BackgroundTransparency=1; img.Image=""
+                img.ScaleType=Enum.ScaleType.Fit; img.ZIndex=7; img.Parent=cell
+            end
+            local nlSize=useImage and UDim2.new(1,-2,0,18) or UDim2.new(1,-4,1,0)
+            local nlPos=useImage and UDim2.new(0,1,1,-19) or UDim2.new(0,2,0,0)
+            local nl=MakeLabel(cell,itemName,nlSize,nlPos,9,C.Font,Enum.TextXAlignment.Center,7); nl.TextWrapped=true
+            local btn=Instance.new("TextButton"); btn.Size=UDim2.new(1,0,1,0); btn.BackgroundTransparency=1; btn.Text=""; btn.ZIndex=8; btn.Parent=cell
+            local thisItem=itemName; local thisCell=cell; local thisType=selCosType
+            if useImage and img then
+                local ck="skin|"..thisItem
+                if imageCache[ck] and imageCache[ck]~="" then img.Image=imageCache[ck]
+                else task.defer(function() local id=GetSkinImage(thisItem); if id~="" and img and img.Parent then img.Image=id end end) end
+            end
+            btn.MouseEnter:Connect(function() if selCosmetic~=thisItem then Tween(thisCell,{BackgroundColor3=C.Hover,BorderColor3=C.Accent},0.1) end end)
+            btn.MouseLeave:Connect(function() if selCosmetic~=thisItem then Tween(thisCell,{BackgroundColor3=C.ItemBG,BorderColor3=C.ItemBord},0.1) end end)
+            btn.MouseButton1Click:Connect(function()
+                if cCells[selCosmetic] then Tween(cCells[selCosmetic].frame,{BackgroundColor3=C.ItemBG,BorderColor3=C.ItemBord},0.1) end
+                selCosmetic=thisItem; Tween(thisCell,{BackgroundColor3=C.Accent,BorderColor3=C.Accent},0.1)
+                if thisType=="skin" and selWeapon then
+                    if SkinChanger:ApplySkinModel(selWeapon,thisItem) then
+                        saveSkinsFile(); ApplyLive(selWeapon)
+                        task.defer(function()
+                            local id=GetSkinImage(thisItem); if id=="" then id=GetWeaponImage(selWeapon) end
+                            if wCells[selWeapon] and id~="" then wCells[selWeapon].img.Image=id end
+                        end)
+                    end
+                elseif thisType=="wrap" and selWeapon then
+                    local d=SkinChanger:CloneCosmetic(thisItem,"Wrap",{})
+                    if d then
+                        SkinChanger.equipped[selWeapon]=SkinChanger.equipped[selWeapon] or {}
+                        SkinChanger.equipped[selWeapon].Wrap=d
+                        SkinChanger.equipped[selWeapon].Name=selWeapon
+                        saveSkinsFile()
+                        ApplyLive(selWeapon)
+                    end
+                elseif thisType=="charm" and selWeapon then
+                    local d=SkinChanger:CloneCosmetic(thisItem,"Charm",{})
+                    if d then
+                        SkinChanger.equipped[selWeapon]=SkinChanger.equipped[selWeapon] or {}
+                        SkinChanger.equipped[selWeapon].Charm=d
+                        SkinChanger.equipped[selWeapon].Name=selWeapon
+                        saveSkinsFile()
+                        ApplyLive(selWeapon)
+                    end
+                end
+            end)
+            cCells[thisItem]={frame=cell,img=img}
+        end
+    end
+    CosScroll.CanvasSize=UDim2.new(0,0,0,CGL.AbsoluteContentSize.Y+8)
+end
+
+RefreshAllWeaponImages=function()
+    task.defer(function()
+        for wname,cellData in pairs(wCells) do
+            if cellData and cellData.img then local id=GetWeaponImage(wname); if id~="" then cellData.img.Image=id end end
+        end
+        for wname,eq in pairs(SkinChanger.equipped) do
+            if eq.Skin and wCells[wname] and wCells[wname].img then
+                local id=GetSkinImage(eq.Skin.Name); if id~="" then wCells[wname].img.Image=id end
+            end
+        end
+        if TypeUsesImage(selCosType) then
+            for itemName,cellData in pairs(cCells) do
+                if cellData and cellData.img then local id=GetSkinImage(itemName); if id~="" then cellData.img.Image=id end end
+            end
+        end
+    end)
+end
+
+AABtn.MouseButton1Click:Connect(function()
+    if not selCosmetic then return end
+    if selCosType=="wrap" then
+        for weapon in pairs(WeaponSkins) do local d=SkinChanger:CloneCosmetic(selCosmetic,"Wrap",{}); if d then SkinChanger.equipped[weapon]=SkinChanger.equipped[weapon] or {}; SkinChanger.equipped[weapon].Wrap=d; SkinChanger.equipped[weapon].Name=weapon; ApplyLive(weapon) end end; saveSkinsFile()
+    elseif selCosType=="charm" then
+        for weapon in pairs(WeaponSkins) do local d=SkinChanger:CloneCosmetic(selCosmetic,"Charm",{}); if d then SkinChanger.equipped[weapon]=SkinChanger.equipped[weapon] or {}; SkinChanger.equipped[weapon].Charm=d; SkinChanger.equipped[weapon].Name=weapon; ApplyLive(weapon) end end; saveSkinsFile()
+    elseif selCosType=="skin" then
+        for weapon in pairs(WeaponSkins) do SkinChanger:ApplySkinModel(weapon,selCosmetic); ApplyLive(weapon) end; saveSkinsFile()
+    end
+    Tween(AAI,{BackgroundColor3=C.Accent},0.1); task.delay(0.5,function() Tween(AAI,{BackgroundColor3=C.ItemBG},0.2) end)
+end)
+
+WFilter:GetPropertyChangedSignal("Text"):Connect(function() BuildWeaponGrid(WFilter.Text) end)
+CFilter:GetPropertyChangedSignal("Text"):Connect(function() RefreshCosmeticGrid() end)
+WGL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() WeaponScroll.CanvasSize=UDim2.new(0,0,0,WGL.AbsoluteContentSize.Y+8) end)
+CGL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() CosScroll.CanvasSize=UDim2.new(0,0,0,CGL.AbsoluteContentSize.Y+8) end)
+
+-- // Mobile button
+if IsMobile then
+    local MBF=Instance.new("Frame"); MBF.Size=UDim2.fromOffset(52,52); MBF.Position=UDim2.new(1,-60,0.5,-26)
+    MBF.BackgroundColor3=C.Black; MBF.BorderSizePixel=0; MBF.ZIndex=200; MBF.Parent=ScreenGui
+    local MBI=Instance.new("Frame"); MBI.Size=UDim2.new(1,-2,1,-2); MBI.Position=UDim2.new(0,1,0,1)
+    MBI.BackgroundColor3=C.Accent; MBI.BorderSizePixel=0; MBI.ZIndex=201; MBI.Parent=MBF
+    Instance.new("UICorner",MBI).CornerRadius=UDim.new(0,6)
+    MakeLabel(MBI,"⚙",UDim2.new(1,0,1,0),UDim2.new(0,0,0,0),22,C.Font,Enum.TextXAlignment.Center,202)
+    local MBBtn=Instance.new("TextButton"); MBBtn.Size=UDim2.new(1,0,1,0); MBBtn.BackgroundTransparency=1; MBBtn.Text=""; MBBtn.ZIndex=203; MBBtn.Parent=MBF
+    MakeDraggable(MBF,MBBtn)
+    MBBtn.Activated:Connect(function() MainOuter.Visible=not MainOuter.Visible end)
+end
+
+-- // Keybind toggle
+local menuVisible=true
+UserInputService.InputBegan:Connect(function(inp,processed)
+    if processed then return end
+    if inp.UserInputType==Enum.UserInputType.Keyboard then
+        local ok,kn=pcall(function() return inp.KeyCode.Name end)
+        if ok and kn==currentKeybind then menuVisible=not menuVisible; MainOuter.Visible=menuVisible end
+    end
+end)
+
+-- // Resize handle
+local ResizeHandle=Instance.new("Frame"); ResizeHandle.Size=UDim2.fromOffset(14,14); ResizeHandle.Position=UDim2.new(1,-14,1,-14)
+ResizeHandle.BackgroundColor3=C.Accent; ResizeHandle.BorderSizePixel=0; ResizeHandle.ZIndex=20; ResizeHandle.Parent=MainOuter
+local RHInner=Instance.new("Frame"); RHInner.Size=UDim2.new(1,-2,1,-2); RHInner.Position=UDim2.new(0,1,0,1)
+RHInner.BackgroundColor3=C.AccentDk; RHInner.BorderSizePixel=0; RHInner.ZIndex=21; RHInner.Parent=ResizeHandle
+for r=1,3 do for c2=1,3 do
+    if r+c2>=4 then
+        local d=Instance.new("Frame"); d.Size=UDim2.fromOffset(2,2); d.Position=UDim2.fromOffset(2+(c2-1)*4,2+(r-1)*4)
+        d.BackgroundColor3=Color3.new(1,1,1); d.BackgroundTransparency=0.5; d.BorderSizePixel=0; d.ZIndex=22; d.Parent=RHInner
+    end
+end end
+
+local MIN_W,MIN_H=320,280; local resizing,resizeStart,resizeStartSize=false,nil,nil
+ResizeHandle.InputBegan:Connect(function(inp)
+    if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+        resizing=true; resizeStart=inp.Position; resizeStartSize=Vector2.new(MainOuter.AbsoluteSize.X,MainOuter.AbsoluteSize.Y)
+        inp.Changed:Connect(function() if inp.UserInputState==Enum.UserInputState.End then resizing=false end end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(inp)
+    if resizing and (inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch) then
+        local delta=inp.Position-resizeStart
+        local nw=math.max(MIN_W,resizeStartSize.X+delta.X); local nh=math.max(MIN_H,resizeStartSize.Y+delta.Y)
+        MainOuter.Size=UDim2.fromOffset(nw,nh); LEFT_W=math.floor(nw*0.45)
+        LeftPanel.Size=UDim2.new(0,LEFT_W,1,-8); WeaponScroll.Size=UDim2.new(1,-4,1,-40)
+        RightPanel.Size=UDim2.new(1,-(LEFT_W+14),1,-8); RightPanel.Position=UDim2.new(0,LEFT_W+10,0,4)
+        CosScroll.Size=UDim2.new(1,-4,1,-98)
+    end
+end)
+
+BuildWeaponGrid()
+RefreshCosmeticGrid()
+
+-- Restore saved loadout
+task.defer(function()
+    local saved=loadSkinsFile(); if not next(saved) then return end
+    task.spawn(function()
+        local w=0
+        while not next(SkinChanger.allSkins) and w<20 do task.wait(0.5); w+=0.5 end
+        for weapon,entry in pairs(saved) do
+            if WeaponSkins[weapon] then
+                if type(entry)=="string" then SkinChanger:ApplySkinModel(weapon,entry)
+                else
+                    if entry.skin  then SkinChanger:ApplySkinModel(weapon,entry.skin) end
+                    if entry.wrap  then local d=SkinChanger:CloneCosmetic(entry.wrap,"Wrap",{});  if d then SkinChanger.equipped[weapon]=SkinChanger.equipped[weapon] or {}; SkinChanger.equipped[weapon].Wrap=d;  SkinChanger.equipped[weapon].Name=weapon end end
+                    if entry.charm then local d=SkinChanger:CloneCosmetic(entry.charm,"Charm",{}); if d then SkinChanger.equipped[weapon]=SkinChanger.equipped[weapon] or {}; SkinChanger.equipped[weapon].Charm=d; SkinChanger.equipped[weapon].Name=weapon end end
+                end
+            end
+        end
+        for wname,eq in pairs(SkinChanger.equipped) do
+            if eq.Skin and wCells[wname] and wCells[wname].img then
+                local id=GetSkinImage(eq.Skin.Name); if id~="" then wCells[wname].img.Image=id end
+            end
+        end
+    end)
+end)
