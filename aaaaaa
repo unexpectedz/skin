@@ -922,21 +922,23 @@ local C = {
 
 -- Live sync with Linoria theme changes
 if _G.LinoriaTheme then
-    RunService.Heartbeat:Connect(function()
-        local lib = getgenv().Library
-        if not lib then return end
-        local newAccent = lib.AccentColor
-        if newAccent and newAccent ~= C.Accent then
+    task.spawn(function()
+        while task.wait(0.5) do
+            local lib = getgenv().Library
+            if not lib then continue end
+            local ok, newAccent = pcall(function() return lib.AccentColor end)
+            if not ok or not newAccent then continue end
+            if newAccent == C.Accent then continue end
             C.Accent = newAccent
             C.AccentDk = Color3.fromRGB(
                 math.clamp(newAccent.R*255-30,0,255),
                 math.clamp(newAccent.G*255-30,0,255),
                 math.clamp(newAccent.B*255-30,0,255))
-            C.BG      = lib.BackgroundColor or C.BG
-            C.Main    = lib.MainColor       or C.Main
-            C.Outline = lib.OutlineColor    or C.Outline
-            C.Font    = lib.FontColor       or C.Font
-            C.Hover   = Color3.fromRGB(
+            pcall(function() C.BG      = lib.BackgroundColor end)
+            pcall(function() C.Main    = lib.MainColor       end)
+            pcall(function() C.Outline = lib.OutlineColor    end)
+            pcall(function() C.Font    = lib.FontColor       end)
+            C.Hover = Color3.fromRGB(
                 math.clamp(C.Main.R*255+10,0,255),
                 math.clamp(C.Main.G*255+10,0,255),
                 math.clamp(C.Main.B*255+10,0,255))
