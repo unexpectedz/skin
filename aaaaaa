@@ -1,3 +1,71 @@
+local LogService = game:GetService("LogService")
+local ScriptContext = game:GetService("ScriptContext")
+
+task.spawn(function()
+    local Hooked = 0
+
+    for _, Connection in pairs(getconnections(LogService.MessageOut)) do
+        if Connection and Connection.Function then
+            hookfunction(Connection.Function, newcclosure(function(...)
+                return nil
+            end))
+            Hooked += 1
+        end
+    end
+
+    print("Hooked " .. Hooked .. " MessageOut Connections")
+end)
+
+task.spawn(function()
+    local Hooked = 0
+
+    for _, Connection in pairs(getconnections(ScriptContext.Error)) do
+        if Connection then
+            Connection:Disable()
+            Hooked += 1
+        end
+    end
+
+    print("Hooked " .. Hooked .. " Error Connections")
+
+    hookfunction(ScriptContext.Error.Connect, newcclosure(function(...)
+        return nil
+    end))
+end)
+
+assert(newcclosure, "newcclosure missing")
+
+local CoreGui = game:GetService("CoreGui")
+
+local Redirect = CoreGui
+    :WaitForChild("RobloxGui")
+    :FindFirstChild("Modules")
+    :WaitForChild("Common")
+
+local OriginalGetHui = gethui
+
+gethui = newcclosure(function(...)
+    print("[gethui] Called")
+
+    if OriginalGetHui then
+        local Result = OriginalGetHui(...)
+        print("[gethui] Original Returned:", Result)
+
+        if Result == CoreGui then
+            print("[gethui] Blocked CoreGui, Redirecting")
+            return Redirect
+        end
+
+        return Result
+    end
+
+    print("[gethui] No Original, Returning Redirect")
+    return Redirect
+end)
+
+local FakeCore = gethui() or Redirect
+print("[gethui] FakeCore:", FakeCore)
+
 assert(newcclosure, "newcclosure missing")
 
 local CoreGui = game:GetService("CoreGui")
