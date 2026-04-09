@@ -188,6 +188,17 @@ task.spawn(function()
     end
 end)
 
+local finisherOverride = nil
+task.spawn(function()
+    local Players = game:GetService("Players")
+    local lp = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+    local ClientEntity = require(lp.PlayerScripts:WaitForChild("Modules"):WaitForChild("ClientReplicatedClasses"):WaitForChild("ClientEntity"))
+    local ogfinisher = ClientEntity._PlayFinisher
+    ClientEntity._PlayFinisher = function(self, originalName, ...)
+        return ogfinisher(self, finisherOverride or originalName, ...)
+    end
+end)
+
 local oldtable; oldtable = hookfunction(getrenv().setmetatable, newcclosure(function(Table, Metatable)
     if Metatable and typeof(Metatable) == "table" and rawget(Metatable, "__mode") == "kv" then
         local trace = debug.traceback()
@@ -263,6 +274,9 @@ table.sort(allWraps)
 
 local allCharms = {"Armchair","Bone","Bowling Pin","Cage","Candy","Candy Corn","Chombie Head","Cobweb","Cog","Cookie","Crystal","Cupcake","Dice","Fedora Stack","Glory Coin","Hammer","Heart","Hook","Ice Cube","Jolly Hat","Lemon Slice","Life Buoy","Magnet","Mini Candy Cane","Mini Shining Star","Ninja Star","Ornament","Pawn","Peppermint Candy","Potted Cactus","Potted Flower","Rune Ring","Runes","Ship Wheel","Snowflake","Snowflake Ring","Snowman","Spider","Star","Table Lamp","Thorn Circle","Traffic Cone","Witch Hat","10 Gallon Hat","Anvil","Basketball","Bitster","Blobfish","Candy Bucket","Caramel Apple","Devious Pumpkin","Emoji: Weary","Festive Light","Football","Golf Ball","Gravestone","Hot Chocolate","Hotdog","Melonkin","Mini Portal","Moai","Money Bag","Mystery Block","Poop","Potion","Pufferfish","Rainbow","Rocket Ship","Rubber Duck","Stocking","Tennis Ball","UFO","Alien Head","Black Cat","Cauldron","Chillman","Dumbkin","Emoji: Imp","Emoji: Nerd","Emoji: Nauseated","Energy Cell","Explosion","Eyeclipse","EZ","First Aid","Frankenblob","Ghost","Gingerbread Cat","Jingle Bell","Keycard 3","Mini Ban Hammer","Mini Disco Ball","Mini Key","Mini Snowglobe","Pumpkin Cat","Skull","Skullgourd","Warp Disc","Wreath","100M Visits","1st Birthday Cake","3D Glasses","8sty","Applino","Atorix","Bandites","Bell","Blizmid","BobbVX","Brian1KB","Bungeoppang","CarbonMeister","Chex","D_reamz","Darktru","Day 1","DV","enriquebruv","Fireplace","Frozen Gaming Chair","Gaming Headset","GreatGuyBoom","Hoopie","Hoppy819","Hunt Token","I Survived Season 0","KaiM","Karful","Kaye","Khayri","Mega Token","Mini Present","MiniBloxia","Mud","nekoanims","Nosniy","Nosniy Games","oPixel","philhood","RIA25 Award","RIVALS","Season 0","Season 1","SenseiWarrior","ShadowTrojan","SharkTactics","Shooting Star","Streamer Microphone","TanqR","viecti","Alpha Coin","Coinbama","Team Crown"}
 table.sort(allCharms)
+
+local allFinishers = {"OOF","Ragdoll","Stiff","Darkheart","Confetti","Ignite","Yoink","Hacked","Petrify","Freeze","Balloons","Low Gravity","Midas Touch","Diamond Hands","Boogie","Pixel Coins","Tough Crowd","BONK!","Heartbeat","Collapse","Splatter","Electrocute","Rush","High Gravity","Opulent","Tremble","Flop","Toot","Orbital Strike","Every Finisher Ever","Bite","Spooky Confetti","Batsplosion","Lost Soul","Bonesplosion","Disintegrate","Reaper","Zombified","RIP","Broom Ride","DRIP","Beacon","Frozen","Snowballed","David","Festive Confetti","Wrapped","Falling Icicles","Giant Ice Spike","Jolly Judgement","Gingerbreadify","5B Visits","Chark Attack","Delete","Squawk","Digitize","Ascend","Rainbow Barf","Chalked","Bubblegum","GOOAAALLLL","Heavy Head","Folded","Flick","Bad Mood","Hooked","Crushed","Clapped","Roadrunner","Very Tragic Banana Peel Accident","Enlightened","Erased","Director's Cut","For Glory","Impaled","Warped Away","Bogey","Blip","Spaghettified","Faceplant","Warp Sickness","Instability","Those Who Know","Fall Apart","Giant Snowball","Snowmanify","Northern Light Show","Elfify","Decorated Player","Firework Show","Coalify","Chill Out","Sleigh Away","Inflate","Dematerialize","Poof","Leprechaunify","Plushify"}
+table.sort(allFinishers)
 
 -- // SkinChanger
 local SkinChanger = {
@@ -601,6 +615,21 @@ local function GetWeaponImage(wname)
     end)
     imageCache[k]=id; return id
 end
+
+local function GetFinisherImage(name)
+    local k = "finisher|"..name
+    if imageCache[k] ~= nil then return imageCache[k] end
+    local id = ""
+    pcall(function()
+        local CL = SkinChanger.CosmeticLibrary
+        if CL and CL.Cosmetics and CL.Cosmetics[name] then
+            id = CL.Cosmetics[name].Image or ""
+        end
+    end)
+    imageCache[k] = id
+    return id
+end
+
 local function GetSkinImage(name)
     local k="skin|"..name
     if imageCache[k]~=nil then return imageCache[k] end
@@ -1206,7 +1235,7 @@ TypePopupList.SortOrder = Enum.SortOrder.LayoutOrder; TypePopupList.Parent = Typ
 
 local selCosType = "skin"
 local typePopupOpen = false
-local typeOptions = {"skin","wrap","charm"}
+local typeOptions = {"skin","wrap","charm","finisher"}
 
 local function PositionTypePopup()
     local ap = TypeDropOuter.AbsolutePosition
@@ -1433,7 +1462,8 @@ RefreshCosmeticGrid = function()
         if not selWeapon then CGridScroll.CanvasSize=UDim2.new(0,0,0,0); return end
         items=WeaponSkins[selWeapon] or {}
     elseif selCosType=="wrap" then items=allWraps
-    elseif selCosType=="charm" then items=allCharms end
+    elseif selCosType=="charm" then items=allCharms
+    elseif selCosType=="finisher" then items=allFinishers end
 
     CGridLayout.CellSize=UDim2.fromOffset(CELL_W,CELL_H)
 
@@ -1490,6 +1520,40 @@ RefreshCosmeticGrid = function()
                             end)
                         end
                     end
+                end)
+                cCells[thisItem]={frame=outer,inner=inner,name=nameLbl}
+
+elseif thisType=="finisher" then
+                local imgLabel = Instance.new("ImageLabel")
+                imgLabel.Size = UDim2.new(1,0,1,0); imgLabel.BackgroundTransparency = 1
+                imgLabel.ScaleType = Enum.ScaleType.Fit; imgLabel.Image = ""; imgLabel.ZIndex = 9; imgLabel.Parent = preview
+
+                task.defer(function()
+                    local id = GetFinisherImage(thisItem)
+                    if id ~= "" and imgLabel.Parent then imgLabel.Image = id end
+                end)
+
+                local spinKey = "f_"..thisItem
+                btn.MouseEnter:Connect(function()
+                    if selCosmetic ~= thisItem then Tween(inner,{BackgroundColor3=C.ItemSel},0.08) end
+                    Tween(preview,{Size=UDim2.new(1,-1,0,PREVIEW_H+3),Position=UDim2.fromOffset(0,0)},0.1)
+                    if not spinConns[spinKey] then spinConns[spinKey]=StartSpin2D(imgLabel) end
+                end)
+                btn.MouseLeave:Connect(function()
+                    if selCosmetic ~= thisItem then Tween(inner,{BackgroundColor3=C.Main},0.08) end
+                    Tween(preview,{Size=UDim2.new(1,-4,0,PREVIEW_H),Position=UDim2.fromOffset(2,2)},0.1)
+                    if spinConns[spinKey] then spinConns[spinKey]:Disconnect(); spinConns[spinKey]=nil; imgLabel.Rotation=0 end
+                end)
+                btn.MouseButton1Click:Connect(function()
+                    if selCosmetic and cCells[selCosmetic] then
+                        local p = cCells[selCosmetic]
+                        Tween(p.inner,{BackgroundColor3=C.Main},0.1)
+                        if p.name then Tween(p.name,{TextColor3=C.SubFont},0.1) end
+                    end
+                    selCosmetic = thisItem
+                    finisherOverride = thisItem
+                    Tween(inner,{BackgroundColor3=C.ItemSel},0.1)
+                    Tween(nameLbl,{TextColor3=C.Font},0.1)
                 end)
                 cCells[thisItem]={frame=outer,inner=inner,name=nameLbl}
 
@@ -1573,6 +1637,8 @@ ApplyBtn.MouseButton1Click:Connect(function()
             end
         end
         saveSkinsFile()
+elseif selCosType=="finisher" then
+        finisherOverride = selCosmetic
     elseif selCosType=="skin" then
         for weapon in pairs(WeaponSkins) do
             SkinChanger:ApplySkinModel(weapon,selCosmetic); ApplyLive(weapon)
